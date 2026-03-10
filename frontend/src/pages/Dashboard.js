@@ -236,34 +236,58 @@ const Dashboard = () => {
         </p>
       </header>
 
+      
+
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         <StatCard icon={<Zap/>}    label="Streak"      value={`${user.streak} Days`}  color="text-orange-500" sub="Keep going!" />
         <StatCard icon={<Trophy/>} label="Focus Coins" value={`🪙 ${user.focusCoins}`} color="text-accent4"    sub="Win duels to earn more" />
         <StatCard icon={<Swords/>} label="Duel Wins"   value={user.duelWins}          color="text-accent3"    sub={`${user.xp} XP total`} />
 
-        {/* Daily Streak Card — with explanation tooltip */}
+        {/* Daily Streak Card — Refined Tooltip Version */}
         <div className="relative group/streak">
           <button
             onClick={handleCheckIn}
             className="w-full h-full bg-accent rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:scale-105 transition shadow-xl shadow-accent/20 flex flex-col items-center justify-center gap-2 p-6 min-h-[120px]"
           >
-            <Zap size={24} className="text-white"/>
+            <Zap size={24} className="text-white fill-white/20"/>
             <span>Claim Daily Streak</span>
           </button>
 
-          {/* Hover tooltip */}
-          <div className="absolute bottom-full mb-2 left-0 right-0 bg-[#14141a] border border-[#2a2a38] rounded-2xl p-4 shadow-2xl z-20
-            opacity-0 group-hover/streak:opacity-100 pointer-events-none transition-opacity duration-200">
-            <p className="text-white font-bold text-xs mb-2">How to claim?</p>
-            <ul className="text-[10px] text-muted font-mono space-y-1.5">
-              <li>✅ Complete all due revision cards today, <span className="text-white">OR</span></li>
-              <li>✅ Solve & verify a duel today</li>
-              <li className="text-muted/60 pt-1">If queue is empty today, a duel win counts!</li>
+          {/* New Floating Tooltip */}
+          <div className="absolute bottom-[115%] left-1/2 -translate-x-1/2 w-[260px] 
+            bg-[#14141a]/95 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl z-50
+            opacity-0 group-hover/streak:opacity-100 pointer-events-none transition-all duration-300 
+            group-hover/streak:translate-y-[-10px] scale-95 group-hover/streak:scale-100">
+            
+            {/* The Little Arrow */}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[#14141a]"></div>
+
+            <p className="text-white font-black text-[11px] uppercase tracking-widest mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+              Claim Requirements
+            </p>
+            
+            <ul className="space-y-4">
+              <li className="flex items-start gap-3">
+                <div className="bg-accent3/20 text-accent3 p-1 rounded-lg">
+                  <Clock size={12} />
+                </div>
+                <p className="text-[10px] text-gray-300 font-mono leading-relaxed">
+                  Complete all <span className="text-white font-bold">Due Revision Cards</span> of today.
+                </p>
+              </li>
+              <li className="flex items-start gap-3 border-t border-white/5 pt-4">
+                <div className="bg-accent4/20 text-accent4 p-1 rounded-lg">
+                  <Swords size={12} />
+                </div>
+                <p className="text-[10px] text-gray-400 font-mono leading-relaxed">
+                  Queue empty? One <span className="text-white font-bold italic">Duel Win</span> counts!
+                </p>
+              </li>
             </ul>
           </div>
         </div>
-        
       </div>
 
       {/* Main grid */}
