@@ -414,28 +414,35 @@ const Review = () => {
           {allCards.length === 0 && (
             <div className="text-center py-16 text-muted font-mono text-sm">No cards yet. Add some!</div>
           )}
-          {allCards.map(card => (
-            <div key={card._id} className="bg-surface border border-border rounded-2xl px-5 py-4 flex items-center justify-between group">
-              <div className="flex items-center gap-3">
-                <span className={`text-[9px] font-mono px-2 py-0.5 rounded border font-bold uppercase ${diffColor(card.difficulty)}`}>{card.difficulty}</span>
-                <div>
+        {allCards.map(card => (
+          <div key={card._id} className="bg-surface border border-border rounded-2xl px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className={`text-[9px] font-mono px-2 py-0.5 rounded border font-bold uppercase ${diffColor(card.difficulty)}`}>
+                {card.difficulty}
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
                   <span className="font-bold text-sm">{card.problemTitle}</span>
-                  <div className="text-[10px] text-muted font-mono">{card.category} · {card.totalReviews} reviews · ease {card.easeFactor.toFixed(2)}</div>
+                  <a href={`https://leetcode.com/problems/${card.problemSlug}/`} 
+                    target="_blank" rel="noreferrer"
+                    className="text-muted hover:text-accent transition">
+                    <ExternalLink size={12}/>
+                  </a>
+                </div>
+                <div className="text-[10px] text-muted font-mono">
+                  {card.category} · {card.totalReviews} reviews · ease {card.easeFactor.toFixed(2)}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-mono text-muted">{formatDate(card.nextReviewDate)}</span>
-                <a href={`https://leetcode.com/problems/${card.problemSlug}/`} target="_blank" rel="noreferrer"
-                  className="text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition">
-                  <ExternalLink size={14}/>
-                </a>
-                <button onClick={() => handleDelete(card._id)}
-                  className="text-muted hover:text-accent2 opacity-0 group-hover:opacity-100 transition">
-                  <Trash2 size={14}/>
-                </button>
-              </div>
             </div>
-          ))}
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-mono text-muted">{formatDate(card.nextReviewDate)}</span>
+              <button onClick={() => handleDelete(card._id)}
+                className="text-muted hover:text-accent2 transition p-1">
+                <Trash2 size={14}/>
+              </button>
+            </div>
+          </div>
+        ))}
         </div>
       </div>
     );

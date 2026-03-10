@@ -1,17 +1,20 @@
 import { Router } from "express";
-import { signup,login } from "../controllers/authController.js";
-import {authMiddleware} from "../middleware/authMiddleware.js";
+import { signup, login } from "../controllers/authController.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 import User from "../models/User.js";
-
 
 const router = Router();
 
 router.post("/signup", signup);
 router.post("/login", login);
+
+// Get current user
 router.get("/me", authMiddleware, async (req, res) => {
   const user = await User.findById(req.user.userId);
   res.json(user);
 });
+
+// Update LeetCode handle (existing)
 router.put("/update-leetcode", authMiddleware, async (req, res) => {
   try {
     const { leetcodeUsername } = req.body;
@@ -19,6 +22,61 @@ router.put("/update-leetcode", authMiddleware, async (req, res) => {
     res.json({ message: "LeetCode handle updated successfully!" });
   } catch (error) {
     res.status(500).json({ message: "Update failed" });
+  }
+});
+
+// ── NEW: Update full extended profile ────────────────────────────────────────
+router.put("/update-profile", authMiddleware, async (req, res) => {
+  try {
+    const {
+      displayName,
+      currentStatus,
+      techStack,
+      dsaLevel,
+      codingExperienceYears,
+      bio,
+      projects,
+      githubUrl,
+      linkedinUrl,
+      portfolioUrl,
+      leetcodeUsername,
+    } = req.body;
+
+    const update = {};
+    if (displayName !== undefined) update.displayName = displayName;
+    if (currentStatus !== undefined) update.currentStatus = currentStatus;
+    if (techStack !== undefined) update.techStack = techStack;
+    if (dsaLevel !== undefined) update.dsaLevel = dsaLevel;
+    if (codingExperienceYears !== undefined)
+      update.codingExperienceYears = codingExperienceYears;
+    if (bio !== undefined) update.bio = bio;
+    if (projects !== undefined) update.projects = projects;
+    if (githubUrl !== undefined) update.githubUrl = githubUrl;
+    if (linkedinUrl !== undefined) update.linkedinUrl = linkedinUrl;
+    if (portfolioUrl !== undefined) update.portfolioUrl = portfolioUrl;
+    if (leetcodeUsername !== undefined) update.leetcodeUsername = leetcodeUsername;
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.userId,
+      { $set: update },
+      { new: true }
+    );
+    res.json({ message: "Profile updated!", user: updated });
+  } catch (error) {
+    res.status(500).json({ message: "Profile update failed" });
+  }
+});
+
+// ── NEW: Get any user's public profile by ID ──────────────────────────────────
+router.get("/profile/:userId", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select(
+      "-password -email"
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch profile" });
   }
 });
 

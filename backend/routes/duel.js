@@ -16,6 +16,6 @@ router.post("/reject/:roomId", authMiddleware, rejectOpponent);
 router.get("/status/:roomId", authMiddleware, getDuelStatus);
 router.post("/verify", authMiddleware, verifyAndFinalize);
 router.post("/end/:roomId", authMiddleware, endDuel);
-router.get("/mystats", getMyStats);
+router.get("/mystats",authMiddleware, getMyStats);
 
 export default router;
