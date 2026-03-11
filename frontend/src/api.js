@@ -1,6 +1,12 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: 'https://peerforge.onrender.com' });
+const API = axios.create({ 
+  // ADD THE /api SUFFIX HERE
+  baseURL: isLocalhost 
+    ? 'http://localhost:5001/api' 
+    : 'https://peerforge.onrender.com/api' 
+});
+
 
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem('token');
