@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Clock, Zap, CheckCircle, RotateCcw, ChevronRight, Plus, Trash2, BarChart2, Calendar, X, ExternalLink, Flame } from 'lucide-react';
+import { BookOpen, Clock, Zap, CheckCircle, RotateCcw, Plus, Trash2, BarChart2, Calendar, X, ExternalLink, Flame } from 'lucide-react';
 import API from '../api';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

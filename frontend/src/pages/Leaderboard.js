@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../api';
-import { Trophy, Swords, Layers, ExternalLink, Medal } from 'lucide-react';
+import { Trophy, Swords, Layers, ExternalLink } from 'lucide-react';
 
 const RankBadge = ({ rank }) => {
   if (rank === 1) return <span className="text-2xl">🥇</span>;

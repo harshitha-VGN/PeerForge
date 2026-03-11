@@ -1,6 +1,6 @@
 import express from "express";
 import { addCard, getDueCards, submitReview, getAllCards, deleteCard } from "../controllers/reviewController.js";
-import { protect } from "../middleware/authMiddleware.js"; // your existing auth middleware
+import { protect } from "../middleware/authMiddleware.js"; 
 
 const router = express.Router();
 
@@ -14,6 +14,3 @@ router.delete("/:id", deleteCard);        // DELETE remove a card
 
 export default router;
 
-// ─── Register in your app.js / server.js like: ───────────────────────────────
-// import reviewRoutes from "./routes/reviewRoutes.js";
-// app.use("/api/review", reviewRoutes);

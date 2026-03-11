@@ -5,12 +5,14 @@ export const signup = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Validate request body
     if (!email || !password) {
       return res.status(400).json({
         message: "Email and password are required",
       });
     }
 
+    // Check if user already exists with this email
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
@@ -19,7 +21,7 @@ export const signup = async (req, res) => {
       });
     }
 
-    // Just pass raw password — model handles hashing
+    // Password hashing is handled inside the User model (pre-save hook)
     await User.create({
       email,
       password,
@@ -30,33 +32,33 @@ export const signup = async (req, res) => {
     });
 
   } catch (error) {
-  console.error(error);
+    console.error(error);
 
-  // MongoDB duplicate key error
-  if (error.code === 11000) {
-    return res.status(400).json({
-      message: "Email already registered",
+    // MongoDB duplicate key error (usually triggered by unique email index)
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "Email already registered",
+      });
+    }
+
+    res.status(500).json({
+      message: "Server error",
     });
   }
-
-  res.status(500).json({
-    message: "Server error",
-  });
-}
 };
 
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1️⃣ validation
+    // Validate request body
     if (!email || !password) {
       return res.status(400).json({
         message: "Email and password are required",
       });
     }
 
-    // 2️⃣ check user exists
+    // Explicitly include password since schema may exclude it by default
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
@@ -65,8 +67,8 @@ export const login = async (req, res) => {
       });
     }
 
-    // 3️⃣ compare password
-    const isMatch = await user.comparePassword(password)
+    // Custom method defined in User model to compare hashed password
+    const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
       return res.status(400).json({
@@ -74,22 +76,23 @@ export const login = async (req, res) => {
       });
     }
 
-    
-    // 4️⃣ generate token
+    // Generate JWT token for authenticated requests
     const token = jwt.sign(
       { userId: user._id },     // payload
-      process.env.JWT_SECRET,   // secret
-      { expiresIn: "1h" }       // expiration
+      process.env.JWT_SECRET,   // secret key
+      { expiresIn: "1h" }       // token expiry
     );
+
     res.status(200).json({
-      message: "Login successful",token,
+      message: "Login successful",
+      token,
     });
 
   } catch (error) {
     console.error(error);
+
     res.status(500).json({
       message: "Server error",
     });
   }
 };
-

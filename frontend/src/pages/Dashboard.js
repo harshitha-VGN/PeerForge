@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import API from '../api';
 import {
-  Zap, Trophy, Swords, TrendingUp, Target, ExternalLink,
-  Layers, ChevronRight, Users, MessageSquare, Bell, Clock, Info
+  Zap, Trophy, Swords, Target, ExternalLink,
+  Layers, ChevronRight, Users, Bell, Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// Difficulty → color mapping for duel problems
 const diffColor = {
   Easy: "text-accent3 bg-accent3/10",
   Medium: "text-accent4 bg-accent4/10",
   Hard: "text-accent2 bg-accent2/10",
 };
 
+// Generic stat card used in dashboard header
 const StatCard = ({ icon, label, value, color, sub }) => (
   <div className="bg-surface border border-border p-6 rounded-[2rem] shadow-lg">
     <div className={`mb-3 ${color}`}>{icon}</div>
@@ -22,11 +24,13 @@ const StatCard = ({ icon, label, value, color, sub }) => (
 );
 
 // ─── Battle Stats Widget ──────────────────────────────────────────────────────
+// Shows duel performance (win rate, streak, category strength, recent duels)
 const BattleStats = ({ userEmail }) => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // Fetch duel statistics from backend
   useEffect(() => {
     API.get('/duels/mystats')
       .then(r => setStats(r.data))
@@ -34,12 +38,14 @@ const BattleStats = ({ userEmail }) => {
       .finally(() => setLoading(false));
   }, []);
 
+  // Loading skeleton
   if (loading) return (
     <div className="flex flex-col gap-3 animate-pulse">
       {[1,2,3].map(i => <div key={i} className="h-10 bg-surface2 rounded-xl"/>)}
     </div>
   );
 
+  // Empty state when user hasn't played any duels
   if (!stats || stats.totalDuels === 0) return (
     <div className="py-12 text-center">
       <Swords className="mx-auto text-muted/30 mb-3" size={36}/>
@@ -57,6 +63,8 @@ const BattleStats = ({ userEmail }) => {
 
   return (
     <div className="flex flex-col gap-5">
+
+      {/* Win rate progress bar */}
       <div>
         <div className="flex justify-between text-[10px] font-mono text-muted uppercase mb-2">
           <span>Win Rate</span>
@@ -68,6 +76,7 @@ const BattleStats = ({ userEmail }) => {
         </div>
       </div>
 
+      {/* Mini statistics */}
       <div className="grid grid-cols-3 gap-2">
         {[
           { label: "Wins", value: wins, color: "text-accent3" },
@@ -81,6 +90,7 @@ const BattleStats = ({ userEmail }) => {
         ))}
       </div>
 
+      {/* Category strength breakdown */}
       {categoryBreakdown?.length > 0 && (
         <div>
           <div className="text-[10px] font-mono text-muted uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -101,6 +111,7 @@ const BattleStats = ({ userEmail }) => {
         </div>
       )}
 
+      {/* Recent duel history */}
       {recentDuels?.length > 0 && (
         <div>
           <div className="text-[10px] font-mono text-muted uppercase tracking-widest mb-2">Recent Battles</div>
@@ -133,6 +144,7 @@ const BattleStats = ({ userEmail }) => {
 };
 
 // ─── Pod Stats Widget ─────────────────────────────────────────────────────────
+// Shows pods the user is currently a member of
 const PodStats = () => {
   const [myPods, setMyPods] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +163,7 @@ const PodStats = () => {
     </div>
   );
 
+  // Empty state
   if (myPods.length === 0) return (
     <div className="py-12 text-center">
       <Layers className="mx-auto text-muted/30 mb-3" size={32}/>
@@ -166,13 +179,18 @@ const PodStats = () => {
     <div className="flex flex-col gap-3">
       {myPods.map(pod => {
         const pendingCount = pod.pendingRequests?.length || 0;
+
         return (
           <div key={pod._id}
             onClick={() => navigate('/pods')}
             className="p-4 bg-bg border border-border rounded-2xl flex items-center gap-3 cursor-pointer hover:border-accent/30 transition group">
+
+            {/* Pod avatar */}
             <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center font-black text-accent text-sm shrink-0">
               {pod.title[0].toUpperCase()}
             </div>
+
+            {/* Pod info */}
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm text-white truncate group-hover:text-accent transition">{pod.title}</div>
               <div className="flex items-center gap-2 mt-0.5">
@@ -185,11 +203,14 @@ const PodStats = () => {
                 </span>
               </div>
             </div>
+
+            {/* Pending requests indicator */}
             {pendingCount > 0 && (
               <span className="flex items-center gap-1 bg-accent text-white text-[9px] font-black px-2 py-1 rounded-full shrink-0">
                 <Bell size={9}/> {pendingCount}
               </span>
             )}
+
             <ChevronRight size={14} className="text-muted group-hover:text-accent transition shrink-0"/>
           </div>
         );
@@ -198,16 +219,19 @@ const PodStats = () => {
   );
 };
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
+// ─── Dashboard Page ───────────────────────────────────────────────────────────
 const Dashboard = () => {
   const [user, setUser] = useState(null);
-  const [showStreakInfo, setShowStreakInfo] = useState(false);
   const navigate = useNavigate();
 
+  // Fetch current user profile
   useEffect(() => {
-    API.get('/auth/me').then(r => setUser(r.data)).catch(err => console.error(err));
+    API.get('/auth/me')
+      .then(r => setUser(r.data))
+      .catch(err => console.error(err));
   }, []);
 
+  // Claim daily streak
   const handleCheckIn = async () => {
     try {
       await API.post('/progress/checkin');
@@ -226,6 +250,7 @@ const Dashboard = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto font-body text-white">
+
       {/* Header */}
       <header className="mb-10">
         <h1 className="text-4xl font-head font-black italic uppercase tracking-tighter">
@@ -236,15 +261,13 @@ const Dashboard = () => {
         </p>
       </header>
 
-      
-
-      {/* Stat cards */}
+      {/* Main stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <StatCard icon={<Zap/>}    label="Streak"      value={`${user.streak} Days`}  color="text-orange-500" sub="Keep going!" />
-        <StatCard icon={<Trophy/>} label="Focus Coins" value={`🪙 ${user.focusCoins}`} color="text-accent4"    sub="Win duels to earn more" />
-        <StatCard icon={<Swords/>} label="Duel Wins"   value={user.duelWins}          color="text-accent3"    sub={`${user.xp} XP total`} />
+        <StatCard icon={<Zap/>} label="Streak" value={`${user.streak} Days`} color="text-orange-500" sub="Keep going!" />
+        <StatCard icon={<Trophy/>} label="Focus Coins" value={`🪙 ${user.focusCoins}`} color="text-accent4" sub="Win duels to earn more" />
+        <StatCard icon={<Swords/>} label="Duel Wins" value={user.duelWins} color="text-accent3" sub={`${user.xp} XP total`} />
 
-        {/* Daily Streak Card — Refined Tooltip Version */}
+        {/* Daily check-in button */}
         <div className="relative group/streak">
           <button
             onClick={handleCheckIn}
@@ -254,32 +277,32 @@ const Dashboard = () => {
             <span>Claim Daily Streak</span>
           </button>
 
-          {/* New Floating Tooltip */}
+          {/* Tooltip explaining requirements */}
           <div className="absolute bottom-[115%] left-1/2 -translate-x-1/2 w-[260px] 
             bg-[#14141a]/95 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl z-50
             opacity-0 group-hover/streak:opacity-100 pointer-events-none transition-all duration-300 
             group-hover/streak:translate-y-[-10px] scale-95 group-hover/streak:scale-100">
-            
-            {/* The Little Arrow */}
+
             <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[#14141a]"></div>
 
             <p className="text-white font-black text-[11px] uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
               Claim Requirements
             </p>
-            
+
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
                 <div className="bg-accent3/20 text-accent3 p-1 rounded-lg">
-                  <Clock size={12} />
+                  <Clock size={12}/>
                 </div>
                 <p className="text-[10px] text-gray-300 font-mono leading-relaxed">
                   Complete all <span className="text-white font-bold">Due Revision Cards</span> of today.
                 </p>
               </li>
+
               <li className="flex items-start gap-3 border-t border-white/5 pt-4">
                 <div className="bg-accent4/20 text-accent4 p-1 rounded-lg">
-                  <Swords size={12} />
+                  <Swords size={12}/>
                 </div>
                 <p className="text-[10px] text-gray-400 font-mono leading-relaxed">
                   Queue empty? One <span className="text-white font-bold italic">Duel Win</span> counts!
@@ -290,10 +313,10 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Main grid */}
+      {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-        {/* Battle Stats */}
+        {/* Duel stats panel */}
         <div className="lg:col-span-2 bg-surface border border-border rounded-[2.5rem] p-8 shadow-2xl">
           <div className="flex justify-between items-center mb-6 pb-4 border-b border-border">
             <h3 className="font-head font-black italic text-xl uppercase flex items-center gap-3">
@@ -310,7 +333,7 @@ const Dashboard = () => {
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
 
-          {/* Pod Stats */}
+          {/* Pod panel */}
           <div className="bg-surface border border-border rounded-[2.5rem] p-8">
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-border">
               <h3 className="font-head font-black italic text-xl uppercase flex items-center gap-2">
@@ -324,7 +347,7 @@ const Dashboard = () => {
             <PodStats/>
           </div>
 
-          {/* Quick duel */}
+          {/* Quick duel CTA */}
           <div className="bg-accent/5 border border-accent/20 rounded-[2.5rem] p-8 flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Swords className="text-accent" size={18}/>

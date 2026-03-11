@@ -1,30 +1,43 @@
 import mongoose from "mongoose";
 
 // SM-2 Spaced Repetition Card
-// Each document = one user's relationship with one problem
+// Each document represents one user's review state for a specific problem
 const ReviewCardSchema = new mongoose.Schema({
+  // Reference to the user who owns this review card
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
-  // Problem info (snapshot from LeetCode / duel)
+  // Problem information (snapshot from LeetCode or duel at time of creation)
   problemSlug: { type: String, required: true },
   problemTitle: { type: String, required: true },
-  difficulty: { type: String, enum: ["Easy", "Medium", "Hard"], default: "Medium" },
+
+  // Problem difficulty and category metadata
+  difficulty: {
+    type: String,
+    enum: ["Easy", "Medium", "Hard"],
+    default: "Medium"
+  },
   category: { type: String, default: "General" },
 
-  // SM-2 fields
-  easeFactor: { type: Number, default: 2.5 },      // min 1.3
-  interval: { type: Number, default: 1 },           // days until next review
-  repetitions: { type: Number, default: 0 },        // consecutive successful reviews
+  // ── SM-2 Algorithm Fields ─────────────────────────────
+  easeFactor: { type: Number, default: 2.5 }, // controls how fast intervals grow (minimum 1.3)
+  interval: { type: Number, default: 1 }, // number of days until next review
+  repetitions: { type: Number, default: 0 }, // consecutive successful reviews
+
+  // Scheduling metadata
   nextReviewDate: { type: Date, default: Date.now },
   lastReviewDate: { type: Date, default: null },
-  lastRating: { type: Number, default: null },       // 1=Again 2=Hard 3=Good 4=Easy
 
-  // Stats
+  // Last user rating of recall quality
+  // 1=Again, 2=Hard, 3=Good, 4=Easy
+  lastRating: { type: Number, default: null },
+
+  // Review statistics
   totalReviews: { type: Number, default: 0 },
-  streak: { type: Number, default: 0 },             // current streak of Good/Easy ratings
-}, { timestamps: true });
+  streak: { type: Number, default: 0 }, // consecutive Good/Easy reviews
 
-// Ensure one card per user per problem
+}, { timestamps: true }); // adds createdAt and updatedAt
+
+// Ensure a user can only have one card per problem
 ReviewCardSchema.index({ user: 1, problemSlug: 1 }, { unique: true });
 
 export default mongoose.model("ReviewCard", ReviewCardSchema);

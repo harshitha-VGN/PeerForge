@@ -1,18 +1,16 @@
 import axios from 'axios';
 
-// Ensure the port matches your backend (5001)
 const API = axios.create({ baseURL: 'https://peerforge.onrender.com' });
 
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem('token');
   if (token) {
-    // Note: MUST be "Bearer <token>"
     req.headers.Authorization = `Bearer ${token}`;
   }
   return req;
 });
 
-// ADD THIS: If we get a 401, redirect to login automatically
+
 API.interceptors.response.use(
   (response) => response,
   (error) => {

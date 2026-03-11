@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Send, Users, LogOut, MessageSquare, UserPlus, Clock, AlertTriangle, XCircle, Search, X, Bell, ExternalLink } from 'lucide-react';
+import { Plus, Send, Users, LogOut, MessageSquare, UserPlus, Clock, AlertTriangle, XCircle, Search, X } from 'lucide-react';
 import API from '../api';
 
 const toStr = (id) => (id?._id || id)?.toString();

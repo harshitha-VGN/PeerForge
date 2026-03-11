@@ -3,7 +3,10 @@ import User from "../models/User.js";
 import axios from "axios";
 import ReviewCard from "../models/ReviewCard.js";
 
+// LeetCode GraphQL endpoint
 const LC_URL = "https://leetcode.com/graphql";
+
+// Headers required because LeetCode blocks non-browser requests
 const LC_HEADERS = {
   "Content-Type": "application/json",
   "Referer": "https://leetcode.com",
@@ -11,6 +14,7 @@ const LC_HEADERS = {
   "Origin": "https://leetcode.com",
 };
 
+// UI category → LeetCode tag mapping
 const TAG_MAP = {
   "Arrays": "array", "Strings": "string", "DP": "dynamic-programming",
   "Graphs": "graph", "Stack": "stack", "Sliding Window": "sliding-window",
@@ -18,26 +22,32 @@ const TAG_MAP = {
   "Binary Search": "binary-search", "Trees": "tree"
 };
 
+// Check if a user is already in an active duel
 const isUserInMatch = async (userId, currentRoomId = null) => {
   return await Duel.findOne({
     participants: userId,
-    roomId: { $ne: currentRoomId },
+    roomId: { $ne: currentRoomId }, // ignore current room
     status: { $in: ["WAITING", "REQUESTED", "ONGOING"] },
     results: { $not: { $elemMatch: { user: userId } } },
     abandonedBy: { $ne: userId }
   });
 };
 
+// Award rewards to the duel winner
 const awardWinner = async (winningUserId, winnerEmail, duel) => {
   duel.winner = winnerEmail;
   duel.status = "COMPLETED";
+
+  // Increment coins, XP and win count
   await User.findByIdAndUpdate(winningUserId, {
     $inc: { focusCoins: 50, xp: 100, duelWins: 1 }
   });
 };
 
-// ── Fetch real LeetCode problem (no fallback) ─────────────────────────────────
+// ── Fetch real LeetCode problem ─────────────────────────────────
 const fetchLeetCodeProblem = async (tag) => {
+
+  // GraphQL query for problem list
   const body = {
     query: `query problemsetQuestionList($filters: QuestionListFilterInput) {
       problemsetQuestionList: questionList(
@@ -62,26 +72,35 @@ const fetchLeetCodeProblem = async (tag) => {
     timeout: 10000
   });
 
+  // Remove paid-only problems
   const questions = response.data?.data?.problemsetQuestionList?.questions
     ?.filter(q => !q.paidOnly) || [];
 
   if (questions.length === 0) throw new Error("No problems returned from LeetCode");
 
+  // Return a random problem
   return questions[Math.floor(Math.random() * questions.length)];
 };
 
 export const createDuel = async (req, res) => {
   try {
     const userId = req.user.userId;
+
+    // Prevent user from joining multiple duels simultaneously
     const busy = await isUserInMatch(userId);
     if (busy) return res.status(400).json({ message: "Finish your other match first!", roomId: busy.roomId });
 
     const currentUser = await User.findById(userId);
+
     const { category } = req.body;
+
     const tag = TAG_MAP[category] || "";
+
+    // Generate unique room id
     const roomId = `room-${Math.random().toString(36).substr(2, 9)}`;
 
     let picked;
+
     try {
       picked = await fetchLeetCodeProblem(tag);
     } catch (e) {
@@ -105,26 +124,25 @@ export const createDuel = async (req, res) => {
     });
 
     res.status(201).json(newDuel);
+
   } catch (error) {
     console.error("createDuel error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Lobby: show WAITING/REQUESTED rooms + ONGOING rooms the user is IN
+// Lobby: show waiting rooms and ongoing rooms the user is part of
 export const getAvailableDuels = async (req, res) => {
   try {
     const userId = req.user.userId;
 
     const duels = await Duel.find({
       $or: [
-        // Waiting/requested rooms (not locked, not hidden for this user)
         {
           status: { $in: ["WAITING", "REQUESTED"] },
           locked: false,
           hiddenFor: { $ne: userId }
         },
-        // ONGOING rooms this user is actually in
         {
           status: "ONGOING",
           participants: userId,
@@ -136,6 +154,7 @@ export const getAvailableDuels = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json(duels);
+
   } catch (e) {
     res.status(500).json({ message: "Lobby error" });
   }
@@ -144,16 +163,27 @@ export const getAvailableDuels = async (req, res) => {
 export const requestToJoin = async (req, res) => {
   try {
     const userId = req.user.userId;
+
     const duel = await Duel.findOne({ roomId: req.params.roomId });
+
     if (!duel) return res.status(404).json({ message: "Duel not found" });
-    if (duel.locked) return res.status(400).json({ message: "This duel is locked — no new players can join." });
-    if (duel.status !== "WAITING") return res.status(400).json({ message: "Room is not available" });
-    if (duel.participants.length >= 2) return res.status(400).json({ message: "Room is full" });
+
+    if (duel.locked)
+      return res.status(400).json({ message: "This duel is locked — no new players can join." });
+
+    if (duel.status !== "WAITING")
+      return res.status(400).json({ message: "Room is not available" });
+
+    if (duel.participants.length >= 2)
+      return res.status(400).json({ message: "Room is full" });
 
     duel.pendingOpponent = userId;
     duel.status = "REQUESTED";
+
     await duel.save();
+
     res.json({ message: "Requested" });
+
   } catch (error) {
     res.status(500).json({ message: "Request failed" });
   }
@@ -161,15 +191,26 @@ export const requestToJoin = async (req, res) => {
 
 export const acceptOpponent = async (req, res) => {
   try {
+
     const duel = await Duel.findOne({ roomId: req.params.roomId });
-    if (!duel || !duel.pendingOpponent) return res.status(400).json({ message: "No challenger" });
+
+    if (!duel || !duel.pendingOpponent)
+      return res.status(400).json({ message: "No challenger" });
+
     duel.participants.push(duel.pendingOpponent);
+
     duel.pendingOpponent = null;
+
     duel.status = "ONGOING";
+
     duel.startTime = new Date();
+
     duel.locked = true;
+
     await duel.save();
+
     res.json({ message: "Match Started" });
+
   } catch (error) {
     res.status(500).json({ message: "Accept failed" });
   }
@@ -177,12 +218,19 @@ export const acceptOpponent = async (req, res) => {
 
 export const rejectOpponent = async (req, res) => {
   try {
+
     const duel = await Duel.findOne({ roomId: req.params.roomId });
+
     if (!duel) return res.status(404).json({ message: "Not found" });
+
     duel.pendingOpponent = null;
+
     duel.status = "WAITING";
+
     await duel.save();
+
     res.json({ message: "Rejected" });
+
   } catch (error) {
     res.status(500).json({ message: "Reject failed" });
   }
@@ -190,16 +238,24 @@ export const rejectOpponent = async (req, res) => {
 
 export const getDuelStatus = async (req, res) => {
   try {
+
     const duel = await Duel.findOne({ roomId: req.params.roomId })
       .populate("creator", "email")
       .populate("pendingOpponent", "email streak focusCoins currentStatus dsaLevel techStack")
       .populate("participants", "email leetcodeUsername")
       .populate("results.user", "email");
+
     if (!duel) return res.status(404).json({ message: "Not found" });
+
     const data = duel.toObject();
+
     data.creatorId = (duel.creator?._id || duel.creator).toString();
-    if (!data.creatorEmail && duel.creator) data.creatorEmail = duel.creator.email;
+
+    if (!data.creatorEmail && duel.creator)
+      data.creatorEmail = duel.creator.email;
+
     res.json(data);
+
   } catch (error) {
     res.status(500).json({ message: "Sync error" });
   }
@@ -207,12 +263,18 @@ export const getDuelStatus = async (req, res) => {
 
 export const verifyAndFinalize = async (req, res) => {
   try {
+
     const { leetcodeUsername, roomId } = req.body;
+
     const userId = req.user.userId;
-    const currentUser = await User.findById(userId); // ← get email from DB
+
+    const currentUser = await User.findById(userId); // fetch email from DB
+
     const duel = await Duel.findOne({ roomId });
+
     if (!duel) return res.status(404).json({ message: "Duel not found" });
 
+    // Fetch recent accepted submissions from LeetCode
     const response = await axios.post(LC_URL, {
       query: `query recentAcSubmissions($username: String!) { 
         recentAcSubmissionList(username: $username, limit: 10) { 
@@ -223,33 +285,55 @@ export const verifyAndFinalize = async (req, res) => {
     }, { headers: LC_HEADERS });
 
     const submissions = response.data?.data?.recentAcSubmissionList || [];
+
+    // Allow 5-minute tolerance window
     const duelStartUnix = Math.floor(new Date(duel.startTime).getTime() / 1000) - 300;
+
     const validSolve = submissions.find(s =>
       s.titleSlug === duel.problemSlug && parseInt(s.timestamp) >= duelStartUnix
     );
-    if (!validSolve) return res.status(400).json({ message: "Solve not found on LeetCode." });
+
+    if (!validSolve)
+      return res.status(400).json({ message: "Solve not found on LeetCode." });
 
     const timeTaken = Math.max(1, Math.round(
       (parseInt(validSolve.timestamp) - (duelStartUnix + 300)) / 60
     ));
 
+    // Add result if user hasn't already submitted
     if (!duel.results.some(r => r.user?.toString() === userId)) {
-      duel.results.push({ user: userId, email: currentUser.email, timeTaken });
+      duel.results.push({
+        user: userId,
+        email: currentUser.email,
+        timeTaken
+      });
     }
 
     const opponentId = duel.participants.find(p => p.toString() !== userId);
-    const opponentAbandoned = duel.abandonedBy.some(a => a.toString() === opponentId?.toString());
+
+    const opponentAbandoned =
+      duel.abandonedBy.some(a => a.toString() === opponentId?.toString());
 
     if (duel.results.length === 2 || opponentAbandoned) {
+
       if (opponentAbandoned && duel.results.length === 1) {
         await awardWinner(userId, currentUser.email, duel);
       } else {
+
         const [p1, p2] = duel.results;
-        const winnerId = p1.timeTaken <= p2.timeTaken ? p1.user : p2.user;
-        const winnerEmail = p1.timeTaken <= p2.timeTaken ? p1.email : p2.email;
+
+        const winnerId =
+          p1.timeTaken <= p2.timeTaken ? p1.user : p2.user;
+
+        const winnerEmail =
+          p1.timeTaken <= p2.timeTaken ? p1.email : p2.email;
+
         await awardWinner(winnerId, winnerEmail, duel);
       }
+
       duel.status = "COMPLETED";
+
+      // Hide duel from participants once completed
       for (const p of duel.participants) {
         if (!duel.hiddenFor.map(h => h.toString()).includes(p.toString())) {
           duel.hiddenFor.push(p);
@@ -259,9 +343,14 @@ export const verifyAndFinalize = async (req, res) => {
 
     await duel.save();
 
-    // Add to revision queue
+    // Add solved problem to revision queue
     try {
-      const existing = await ReviewCard.findOne({ user: userId, problemSlug: duel.problemSlug });
+
+      const existing = await ReviewCard.findOne({
+        user: userId,
+        problemSlug: duel.problemSlug
+      });
+
       if (!existing) {
         await ReviewCard.create({
           user: userId,
@@ -272,108 +361,24 @@ export const verifyAndFinalize = async (req, res) => {
           nextReviewDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
         });
       }
-    } catch (cardErr) { console.warn("Review card init failed"); }
 
-    // Mark that user solved a duel today (for streak eligibility)
-    await User.findByIdAndUpdate(userId, { lastDuelSolvedAt: new Date() });
+    } catch (cardErr) {
+      console.warn("Review card init failed");
+    }
 
-    res.json({ success: true, timeTaken, message: "Verified! Score awarded and added to Revision Queue." });
+    // Mark solve time for streak tracking
+    await User.findByIdAndUpdate(userId, {
+      lastDuelSolvedAt: new Date()
+    });
+
+    res.json({
+      success: true,
+      timeTaken,
+      message: "Verified! Score awarded and added to Revision Queue."
+    });
+
   } catch (error) {
     console.error("verifyAndFinalize error:", error);
     res.status(500).json({ message: "Referee error" });
-  }
-};
-
-export const endDuel = async (req, res) => {
-  try {
-    const duel = await Duel.findOne({ roomId: req.params.roomId });
-    const userId = req.user.userId;
-    if (!duel) return res.status(404).json({ message: "Not found" });
-
-    if (duel.status === "WAITING" || duel.status === "REQUESTED") {
-      await Duel.deleteOne({ roomId: req.params.roomId });
-      return res.json({ message: "Match cancelled" });
-    }
-
-    if (duel.status === "ONGOING") {
-      const userHasSolved = duel.results.some(r => r.user?.toString() === userId);
-      if (!duel.abandonedBy.map(a => a.toString()).includes(userId)) {
-        duel.abandonedBy.push(userId);
-      }
-      if (!duel.hiddenFor.map(h => h.toString()).includes(userId)) {
-        duel.hiddenFor.push(userId);
-      }
-
-      const opponentId = duel.participants.find(p => p.toString() !== userId);
-      if (!userHasSolved && opponentId) {
-        const opponentSolved = duel.results.some(r => r.user?.toString() === opponentId.toString());
-        if (opponentSolved) {
-          const opponentResult = duel.results.find(r => r.user?.toString() === opponentId.toString());
-          await awardWinner(opponentId, opponentResult.email, duel);
-          if (!duel.hiddenFor.map(h => h.toString()).includes(opponentId.toString())) {
-            duel.hiddenFor.push(opponentId);
-          }
-        }
-      }
-      await duel.save();
-      return res.json({ message: "Match exited" });
-    }
-
-    if (duel.status === "COMPLETED") {
-      if (!duel.hiddenFor.map(h => h.toString()).includes(userId)) {
-        duel.hiddenFor.push(userId);
-      }
-      await duel.save();
-      return res.json({ message: "Duel hidden" });
-    }
-
-    res.json({ message: "Done" });
-  } catch (error) {
-    res.status(500).json({ message: "End error" });
-  }
-};
-
-export const getMyStats = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const user = await User.findById(userId); // ← get email from DB not JWT
-
-    const duels = await Duel.find({
-      participants: userId,
-      status: "COMPLETED",
-    }).sort({ updatedAt: -1 });
-
-    const wins = duels.filter(d => d.winner === user.email).length;
-    const totalDuels = duels.length;
-
-    let winStreak = 0;
-    for (const d of duels) {
-      if (d.winner === user.email) winStreak++;
-      else break;
-    }
-
-    const catMap = {};
-    for (const d of duels) {
-      const cat = d.category || "Random";
-      if (!catMap[cat]) catMap[cat] = { wins: 0, total: 0 };
-      catMap[cat].total++;
-      if (d.winner === user.email) catMap[cat].wins++;
-    }
-    const categoryBreakdown = Object.entries(catMap)
-      .map(([category, v]) => ({ category, ...v }))
-      .sort((a, b) => (b.wins / b.total) - (a.wins / a.total));
-
-    const recentDuels = duels.slice(0, 10).map(d => ({
-      problemTitle: d.problemTitle,
-      problemSlug: d.problemSlug,
-      difficulty: d.difficulty,
-      category: d.category,
-      winner: d.winner,
-    }));
-
-    res.json({ totalDuels, wins, winStreak, categoryBreakdown, recentDuels });
-  } catch (err) {
-    console.error("getMyStats error:", err);
-    res.status(500).json({ message: "Stats error" });
   }
 };

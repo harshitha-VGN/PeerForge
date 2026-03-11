@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { fetchProblemDetails } from '../services/problemService';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { Play, CheckCircle, Bot } from 'lucide-react';
+import { Play, CheckCircle } from 'lucide-react';
 
 const Workspace = () => {
   const { titleSlug } = useParams();

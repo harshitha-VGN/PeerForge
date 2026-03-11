@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../api';
-import { User, Code2, Briefcase, Github, Linkedin, Globe, Plus, Trash2, ExternalLink, Save, ChevronDown } from 'lucide-react';
+import { User, Code2, Briefcase, Github, Linkedin, Globe, Plus, Trash2, Save} from 'lucide-react';
 
 const TECH_OPTIONS = [
   "React","Vue","Angular","Next.js","TypeScript","JavaScript",

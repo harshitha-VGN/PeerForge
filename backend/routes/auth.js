@@ -5,27 +5,31 @@ import User from "../models/User.js";
 
 const router = Router();
 
+// Authentication routes
 router.post("/signup", signup);
 router.post("/login", login);
 
-// Get current user
+// Get currently authenticated user's data
 router.get("/me", authMiddleware, async (req, res) => {
   const user = await User.findById(req.user.userId);
   res.json(user);
 });
 
-// Update LeetCode handle (existing)
+// Update LeetCode username
 router.put("/update-leetcode", authMiddleware, async (req, res) => {
   try {
     const { leetcodeUsername } = req.body;
+
     await User.findByIdAndUpdate(req.user.userId, { leetcodeUsername });
+
     res.json({ message: "LeetCode handle updated successfully!" });
+
   } catch (error) {
     res.status(500).json({ message: "Update failed" });
   }
 });
 
-// ── NEW: Update full extended profile ────────────────────────────────────────
+// ── Update full extended user profile ────────────────────────────────────────
 router.put("/update-profile", authMiddleware, async (req, res) => {
   try {
     const {
@@ -42,7 +46,9 @@ router.put("/update-profile", authMiddleware, async (req, res) => {
       leetcodeUsername,
     } = req.body;
 
+    // Build update object dynamically (only update provided fields)
     const update = {};
+
     if (displayName !== undefined) update.displayName = displayName;
     if (currentStatus !== undefined) update.currentStatus = currentStatus;
     if (techStack !== undefined) update.techStack = techStack;
@@ -58,23 +64,29 @@ router.put("/update-profile", authMiddleware, async (req, res) => {
 
     const updated = await User.findByIdAndUpdate(
       req.user.userId,
-      { $set: update },
-      { new: true }
+      { $set: update }, // apply only the fields provided
+      { new: true }     // return updated document
     );
+
     res.json({ message: "Profile updated!", user: updated });
+
   } catch (error) {
     res.status(500).json({ message: "Profile update failed" });
   }
 });
 
-// ── NEW: Get any user's public profile by ID ──────────────────────────────────
+// ── Get a user's public profile by ID ─────────────────────────────────────────
 router.get("/profile/:userId", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.params.userId).select(
-      "-password -email"
+      "-password -email" // exclude sensitive fields
     );
-    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (!user)
+      return res.status(404).json({ message: "User not found" });
+
     res.json(user);
+
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch profile" });
   }

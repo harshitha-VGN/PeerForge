@@ -4,10 +4,12 @@ import { buyStreakFreeze, getLeaderboard } from "../controllers/economyControlle
 
 const router = Router();
 
-// Leaderboard is public, but you can add authMiddleware if you want it private
+// Get leaderboard of users ranked by coins/streak
+// Currently public (authMiddleware can be added if you want it protected)
 router.get("/leaderboard", getLeaderboard);
 
-// Buying a freeze requires being logged in
+// Purchase a streak freeze using Focus Coins
+// Requires authentication
 router.post("/buy-freeze", authMiddleware, buyStreakFreeze);
 
 export default router;
