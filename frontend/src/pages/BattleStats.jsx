@@ -6,7 +6,7 @@
 // Backend needed: GET /api/duels/mystats
 
 import React, { useEffect, useState } from 'react';
-import { Swords, TrendingUp, Target, Flame, Trophy, ExternalLink } from 'lucide-react';
+import { Swords, Target, Flame, ExternalLink } from 'lucide-react';
 import API from '../api';
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────
