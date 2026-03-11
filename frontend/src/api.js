@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Ensure the port matches your backend (5001)
-const API = axios.create({ baseURL: 'http://localhost:5001/api' });
+const API = axios.create({ baseURL: 'https://peerforge.onrender.com' });
 
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem('token');
