@@ -2,154 +2,111 @@
 
 > **Competitive coding, collaborative learning — all in one place.**
 
-PeerForge is a full-stack web platform that transforms solo LeetCode grinding into a social experience. Challenge peers to real-time coding duels, form study pods, track your progress with spaced repetition, and climb the leaderboard.
+PeerForge is a full-stack platform that transforms solo LeetCode grinding into a competitive, real-time social ecosystem. Challenge peers to live 1v1 coding duels verified via the LeetCode GraphQL API, form Study Pods for team projects with real-time push chat, and retain problem patterns permanently with SM-2 spaced repetition.
 
 ---
 
-## ✨ Features
+## ✨ Core Systems
 
-### ⚔️ Duel System
-- Create a **live coding duel room** with a real LeetCode problem fetched via GraphQL API
-- Filter problems by category (Arrays, Strings, DP, Graphs, etc.)
-- Challenger requests to join → host accepts/rejects
-- Verify your solve directly against LeetCode's submission history — no honor system
-- Smart quit logic: if you leave mid-match, opponent can still earn points; solved players exit freely
-- Lobby shows only rooms you can join — locks out completed/ongoing rooms automatically
-- Duel wins earn **Focus Coins** and **XP**
 
-### 🧑‍🤝‍🧑 Study Pods
-- Create collaborative project pods with tech stack tags and project description
-- Pod join requests with intro messages — creator reviews applicant profile before accepting
-- Rejection notifications with reason shown on the rejected user's card
-- Real-time group chat for pod members
-- Creator closes pod with a **project link** → pod graduates to the Hall of Fame leaderboard
-- Search and filter pods by tech stack or project tags (Beginner Friendly, Open Source, Hackathon, MVP, etc.)
+### ⚔️ Real-Time 1v1 Duel Engine (Socket.IO)
+- **Live Matchmaking & Lobby:** Create or join duel rooms categorized by topic (DP, Graphs, Trees, Arrays, etc.) with real-time Socket.io push notifications (zero polling).
+- **LeetCode GraphQL Integration:** Real problems fetched live via LeetCode's GraphQL API.
+- **Automated Timestamp-Anchored Referee:** Verifies solves directly against LeetCode's `recentAcSubmissionList` API within a clock-skew tolerant window.
+- **Concurrency & Anti-Cheat:** Atomic document locking (`findOneAndUpdate`) guarantees accurate winner assignment, prevents double joins, and handles opponent abandonment gracefully.
+- **Reward Economy:** Match wins award **50 Focus Coins** and **100 XP**, and automatically add the problem to your revision queue.
 
-### 🔁 Revision Queue (Spaced Repetition)
-- Problems you solve in duels are auto-added to your revision queue
-- SM-2 spaced repetition algorithm — same system used by Anki
-- Rate each review: Again / Hard / Good / Easy — due dates adjust accordingly
-- Library view shows all saved problems with ease factor and review count
+### 🧑‍🤝‍🧑 Study Pods (Collaborative Projects)
+- **Team Incubation:** Launch project pods with customized tech stacks, project briefs, and member limits.
+- **Creator-Gated Applications:** Review applicant DSA levels and experience before accepting or rejecting with personalized feedback.
+- **Real-Time Push Chat:** Sub-50ms message delivery via dedicated Socket.io pod channels.
+- **Hall of Fame:** Completed pods graduate to the Hall of Fame with live GitHub/demo links.
 
-### 🏆 Leaderboard
-- **Players tab** — ranked by Focus Coins (streak as tiebreaker), medals for top 3
-- **Pods Hall of Fame** — closed pods with their tech stack, team, and project links
+### 🔁 SM-2 Spaced Repetition Queue
+- **Automated Card Generation:** Every solved duel problem creates a revision card.
+- **Adaptive SM-2 Algorithm:** SuperMemo-2 mathematical scheduling adjusts review dates according to user recall difficulty ratings (Again / Hard / Good / Easy).
+- **Retention Forecast:** Interactive dashboard displays due cards and upcoming 7-day review projections.
 
-### 📊 Dashboard
-- Live streak tracker with freeze mechanic
-- Focus Coins, Duel Wins, and XP stat cards
-- My Pods widget with member count and pending request badges
-- Battle Stats with recent duel history
-- Quick Duel entry shortcut
+### 🔐 Enterprise Dual-Token Authentication
+- **Short-Lived Access Tokens (15m):** Passed in Authorization header.
+- **Long-Lived Refresh Tokens (7d):** Stored securely in `httpOnly`, `SameSite=Strict`, `Secure` cookies (100% immune to XSS token theft).
+- **Silent Refresh Interceptor:** Axios response interceptor queues concurrent requests during token renewal so user sessions never unexpectedly drop.
 
-### 👤 Profile
-- Link your LeetCode username for solve verification
-- Set your DSA level, current status, years of experience, tech stack
-- Add project portfolio entries with links
-- Public profile visible to pod creators when reviewing join requests
-
-### 🔐 Auth
-- JWT-based authentication with bcrypt password hashing
-- Protected routes throughout
+### 🏆 Gated Gamification & Leaderboard
+- **Anti-Cheat Streak Gate:** Daily streak check-in is strictly locked behind completing your due SM-2 revision queue or winning a duel.
+- **Streak Freeze Protection:** Purchasable via earned Focus Coins (50 coins) with atomic anti-double-spend guarantees.
+- **Live Leaderboard:** Top 50 ranked by Focus Coins and streak count.
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Frontend
-| Tech | Purpose |
+| Layer | Technology |
 |---|---|
-| React 18 | UI framework |
-| React Router v6 | Client-side routing |
-| Tailwind CSS | Styling |
-| Axios | HTTP client |
-| Lucide React | Icons |
-
-### Backend
-| Tech | Purpose |
-|---|---|
-| Node.js + Express 5 | REST API server |
-| MongoDB + Mongoose | Database + ODM |
-| JWT + bcryptjs | Auth + password hashing |
-| Axios | LeetCode GraphQL API calls |
-| date-fns | Date utilities for streak logic |
-| Socket.io | (installed, for future real-time upgrades) |
-
-### External API
-- **LeetCode GraphQL API** — fetches real problems by tag, verifies accepted submissions by username
+| **Frontend** | React 19, TailwindCSS, Socket.io-Client, Axios (with auto-refresh interceptors), Lucide Icons |
+| **Backend** | Node.js, Express 5, Socket.io Server, Cookie-Parser, JWT, BcryptJS, Date-Fns |
+| **Database** | MongoDB Atlas with Mongoose (Atomic concurrency operators) |
+| **External API** | LeetCode GraphQL API |
 
 ---
 
-## 📁 Project Structure
+## 📁 Architecture & File Layout
 
 ```
-CodeBuddy/
+peer_forge/
 ├── backend/
+│   ├── config/db.js             # Mongoose database connection
+│   ├── socket.js                # Centralized Socket.io room & event hub
 │   ├── controllers/
-│   │   ├── authController.js       # Register, login, profile update
-│   │   ├── duelController.js       # Full duel lifecycle + LeetCode verify
-│   │   ├── podController.js        # Pod CRUD, requests, leave, close
-│   │   ├── progressController.js   # Daily streak check-in logic
-│   │   ├── economyController.js    # Leaderboard queries
-│   │   └── reviewController.js     # Spaced repetition SM-2
+│   │   ├── authController.js    # Dual-token auth, refresh rotation, logout
+│   │   ├── duelController.js    # Atomic duel state machine & LC referee
+│   │   ├── podController.js     # Pod lifecycle, atomic requests, push chat
+│   │   ├── progressController.js# Daily streak check-in & gate validation
+│   │   ├── economyController.js # Atomic coin spending & leaderboard
+│   │   └── reviewController.js  # SM-2 spaced repetition engine
 │   ├── models/
-│   │   ├── User.js                 # User schema with profile fields
-│   │   ├── Duel.js                 # Duel rooms, results, abandon tracking
-│   │   ├── Pod.js                  # Pods, messages, requests, rejections
-│   │   ├── ReviewCard.js           # SM-2 review card per problem
-│   │   └── Progress.js             # Daily check-in records
-│   ├── routes/
-│   │   ├── auth.js
-│   │   ├── duel.js
-│   │   ├── podRoutes.js
-│   │   ├── progress.js
-│   │   ├── economy.js
-│   │   └── reviewRoutes.js
+│   │   ├── User.js              # User identity, streak, coins, profile
+│   │   ├── Duel.js              # Match room, results, participants
+│   │   ├── Pod.js               # Study pod, embedded messages, requests
+│   │   ├── ReviewCard.js        # SM-2 card with compound unique index
+│   │   └── Progress.js          # Streak check-in log
+│   ├── routes/                  # Express route definitions
 │   ├── middleware/
-│   │   └── authMiddleware.js       # JWT verification
-│   └── server.js
+│   │   └── authMiddleware.js    # Access token verification
+│   └── server.js                # Express & Socket.io server boot
 │
 └── frontend/
     └── src/
-        ├── pages/
-        │   ├── Dashboard.js
-        │   ├── DuelLobby.js
-        │   ├── DuelRoom.js
-        │   ├── Pods.js
-        │   ├── Leaderboard.js
-        │   ├── Review.js
-        │   ├── Profile.js
-        │   └── Auth.js
-        └── api.js                  # Axios instance with auth header
+        ├── api.js               # Axios instance with silent refresh queue
+        ├── socket.js            # Socket.io client instance
+        └── pages/
+            ├── Dashboard.js     # User statistics, streak, review widget
+            ├── DuelLobby.js     # Real-time room discovery & creation
+            ├── DuelRoom.js      # Real-time war room & solve referee
+            ├── Pods.js          # Real-time study pod hub & group chat
+            ├── Review.js        # Spaced repetition card review session
+            ├── Leaderboard.js   # Global player rankings & Hall of Fame
+            ├── Profile.js       # LeetCode handle & portfolio management
+            └── Auth.js          # Login & registration interface
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quickstart
 
-### Prerequisites
-- Node.js v18+
-- MongoDB (local or Atlas)
-- A LeetCode account (for duel verification)
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/harshitha-VGN/PeerForge.git
-```
-
-### 2. Backend setup
+### 1. Backend Setup
 ```bash
 cd backend
 npm install
 ```
 
-Create a `.env` file in `/backend`:
+Create `.env` in `backend/`:
 ```env
 PORT=5001
-MONGO_URI=mongodb://localhost:27017/codebuddy
-BCRYPT_SALT_ROUNDS=choose_a_number
-JWT_SECRET=your_super_secret_key_here
-
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_access_secret_key
+REFRESH_TOKEN_SECRET=your_jwt_refresh_secret_key
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
 Start the backend:
@@ -157,49 +114,11 @@ Start the backend:
 npm start
 ```
 
-### 3. Frontend setup
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm start
 ```
 
-App runs on `http://localhost:3000`, API on `http://localhost:5001`.
-
----
-
-## 🎮 How to Use
-
-### Starting a Duel
-1. Go to **Duel** → select a category → click **Create Duel**
-2. Wait in your room for a challenger to appear
-3. Accept or reject challengers
-4. Once matched, both players see the LeetCode problem
-5. Solve it on LeetCode, come back and click **"I've Got an Accepted Status"**
-6. The system verifies your submission timestamp against match start time
-7. Fastest verified solve wins 🏆
-
-### Joining a Duel
-1. Go to **Duel** → find an open room → click **Join**
-2. Wait for host approval
-3. Once accepted, start solving!
-
-### Study Pods
-1. **Launch Pod** → fill in title, idea, tech stack, tags, max members
-2. Other users request to join with an intro message
-3. Creator reviews and accepts/rejects (with reason)
-4. Members chat in real-time
-5. When project is done, creator clicks **Close Pod** → adds project link → moves to Hall of Fame
-
----
-
-## 🧠 Streak Rules
-Claim your daily streak by completing **at least one** of:
-- ✅ Complete all due revision cards for today
-- ✅ Verify a duel solve today
-
----
-
-
-
-
+Open `http://localhost:3000` in your browser.

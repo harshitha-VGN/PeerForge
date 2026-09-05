@@ -1,28 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import API from '../api';
+import socket from '../socket';
 import { useNavigate } from 'react-router-dom';
 import { Swords, Plus, Play, Lock } from 'lucide-react';
 
 const DuelLobby = () => {
-
-  // Stores all duel rooms available in the lobby
   const [rooms, setRooms] = useState([]);
-
-  // Selected category for creating a duel
   const [selectedCategory, setSelectedCategory] = useState('Random');
-
-  // Logged-in user's ID
   const [myId, setMyId] = useState('');
 
   const navigate = useNavigate();
 
-  // Categories available for duel problems
   const categories = [
     'Random','Arrays','Strings','DP','Graphs','Stack',
     'Sliding Window','Bit Manipulation','Backtracking','Binary Search','Trees'
   ];
 
-  // Fetch lobby rooms and current user info
   const fetchData = async () => {
     try {
       const [rRes, uRes] = await Promise.all([
@@ -38,34 +31,54 @@ const DuelLobby = () => {
     }
   };
 
-  // Initial fetch + auto refresh every 4 seconds
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 4000);
-    return () => clearInterval(interval);
+
+    socket.emit("join_lobby");
+
+    const handleDuelCreated = (newDuel) => {
+      setRooms((prev) => [newDuel, ...prev.filter((r) => r.roomId !== newDuel.roomId)]);
+    };
+
+    const handleDuelUpdated = (updatedDuel) => {
+      setRooms((prev) => {
+        // If completed or hidden, filter it or update
+        if (updatedDuel.status === 'COMPLETED') {
+          return prev.filter((r) => r.roomId !== updatedDuel.roomId);
+        }
+        return prev.map((r) => (r.roomId === updatedDuel.roomId ? updatedDuel : r));
+      });
+    };
+
+    const handleDuelRemoved = (removedRoomId) => {
+      setRooms((prev) => prev.filter((r) => r.roomId !== removedRoomId));
+    };
+
+    socket.on("duel_created", handleDuelCreated);
+    socket.on("duel_updated", handleDuelUpdated);
+    socket.on("duel_removed", handleDuelRemoved);
+
+    return () => {
+      socket.emit("leave_lobby");
+      socket.off("duel_created", handleDuelCreated);
+      socket.off("duel_updated", handleDuelUpdated);
+      socket.off("duel_removed", handleDuelRemoved);
+    };
   }, []);
 
-  // Create a new duel room
   const handleCreate = async () => {
     try {
       const { data } = await API.post('/duels/create', { category: selectedCategory });
-
-      // Navigate to duel room
       navigate(`/duel/${data.roomId}`);
-
     } catch (err) {
       alert(err.response?.data?.message || 'Error creating room.');
     }
   };
 
-  // Send join request to an existing room
   const handleJoinRequest = async (roomId) => {
     try {
       await API.post(`/duels/request/${roomId}`);
-
-      // Navigate to duel room
       navigate(`/duel/${roomId}`);
-
     } catch (err) {
       alert(err.response?.data?.message || 'Could not join battle.');
     }
@@ -82,7 +95,7 @@ const DuelLobby = () => {
             <Swords className="text-accent" /> THE WAR ROOM
           </h1>
           <p className="text-muted text-sm mt-1">
-            Select a topic and challenge the community.
+            Select a topic and challenge the community (Live Push Updates).
           </p>
         </div>
 
@@ -124,7 +137,6 @@ const DuelLobby = () => {
 
           const currentUid = myId?.toString();
 
-          // Check user's relationship to the room
           const isCreator = (room.creator?._id || room.creator)?.toString() === currentUid;
           const isParticipant = room.participants?.some(p => (p._id || p)?.toString() === currentUid);
           const isPending = (room.pendingOpponent?._id || room.pendingOpponent)?.toString() === currentUid;
@@ -133,11 +145,9 @@ const DuelLobby = () => {
 
           const hostName = (room.creatorEmail || room.creator?.email || 'User').split('@')[0];
 
-          // ONGOING rooms should only appear for participants
           const isOngoing = room.status === 'ONGOING';
           if (isOngoing && !isMember) return null;
 
-          // Determine if user can join
           const canJoin = !isMember && room.status === 'WAITING' && !room.locked;
 
           return (

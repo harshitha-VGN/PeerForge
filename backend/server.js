@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
-import { Server } from "socket.io";
 import connectDB from "./config/db.js";
+import { initSocket } from "./socket.js";
 
 // Routes
 import authRoutes from "./routes/auth.js";
@@ -16,7 +17,6 @@ import economyRoutes from "./routes/economy.js";
 import problemRoutes from "./routes/problem.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 
-
 dotenv.config();
 connectDB();
 
@@ -25,25 +25,26 @@ const httpServer = createServer(app);
 
 // 1. Define allowed origins 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ["http://localhost:3000"];
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) 
+  : ["http://localhost:3000", "http://127.0.0.1:3000", "https://peer-forge-1.vercel.app"];
 
-// 2. Update the Socket.io initialization
-const io = new Server(httpServer, {
-  cors: {
-    origin: allowedOrigins, 
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
+// 2. Initialize Socket.io
+initSocket(httpServer, allowedOrigins);
 
 app.use(cors({
-  
-  origin: ["https://peer-forge-1.vercel.app","http://localhost:3000"], 
-  credentials: true
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes("*")) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Fallback allow for development/deployment
+  },
+  credentials: true,
 }));
 
 app.use(express.json());
+app.use(cookieParser());
 
 // API Routes
 app.use("/api/auth", authRoutes);
@@ -55,33 +56,6 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/economy", economyRoutes);
 app.use("/api/problems", problemRoutes);
 app.use("/api/review", reviewRoutes);
-
-
-
-// --- WebSocket Logic for DSA Duels ---
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  socket.on("join_duel", (roomId) => {
-    socket.join(roomId);
-    console.log(`User joined duel room: ${roomId}`);
-  });
-
-  socket.on("code_update", ({ roomId, code }) => {
-    // Broadcast code to opponent only
-    socket.to(roomId).emit("receive_code", code);
-  });
-
-  socket.on("submit_solution", ({ roomId, status }) => {
-    if (status === "success") {
-      io.in(roomId).emit("duel_winner", { winnerId: socket.id });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected");
-  });
-});
 
 const PORT = process.env.PORT || 5001;
 httpServer.listen(PORT, () => {

@@ -2,6 +2,7 @@ import Duel from "../models/Duel.js";
 import User from "../models/User.js";
 import axios from "axios";
 import ReviewCard from "../models/ReviewCard.js";
+import { getIO } from "../socket.js";
 
 const LC_URL = "https://leetcode.com/graphql";
 const LC_HEADERS = {
@@ -28,9 +29,9 @@ const isUserInMatch = async (userId, currentRoomId = null) => {
   });
 };
 
-const awardWinner = async (winningUserId, winnerEmail, duel) => {
-  duel.winner = winnerEmail;
-  duel.status = "COMPLETED";
+const awardWinner = async (winningUserId, winnerEmail, duelDoc) => {
+  duelDoc.winner = winnerEmail;
+  duelDoc.status = "COMPLETED";
   await User.findByIdAndUpdate(winningUserId, {
     $inc: { focusCoins: 50, xp: 100, duelWins: 1 }
   });
@@ -79,15 +80,15 @@ export const createDuel = async (req, res) => {
     const currentUser = await User.findById(userId);
     const { category } = req.body;
     const tag = TAG_MAP[category] || "";
-    const roomId = `room-${Math.random().toString(36).substr(2, 9)}`;
+    const roomId = `room-${Math.random().toString(36).substring(2, 11)}`;
 
     let picked;
     try {
       picked = await fetchLeetCodeProblem(tag);
     } catch (e) {
       console.error("LeetCode API failed:", e.message);
-      return res.status(503).json({ 
-        message: "Could not fetch problem from LeetCode. Please try again in a moment." 
+      return res.status(503).json({
+        message: "Could not fetch problem from LeetCode. Please try again in a moment."
       });
     }
 
@@ -104,6 +105,12 @@ export const createDuel = async (req, res) => {
       locked: false,
     });
 
+    try {
+      getIO().to("lobby").emit("duel_created", newDuel);
+    } catch (e) {
+      console.warn("Socket broadcast error:", e.message);
+    }
+
     res.status(201).json(newDuel);
   } catch (error) {
     console.error("createDuel error:", error);
@@ -118,13 +125,11 @@ export const getAvailableDuels = async (req, res) => {
 
     const duels = await Duel.find({
       $or: [
-        // Waiting/requested rooms (not locked, not hidden for this user)
         {
           status: { $in: ["WAITING", "REQUESTED"] },
           locked: false,
           hiddenFor: { $ne: userId }
         },
-        // ONGOING rooms this user is actually in
         {
           status: "ONGOING",
           participants: userId,
@@ -144,46 +149,133 @@ export const getAvailableDuels = async (req, res) => {
 export const requestToJoin = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const duel = await Duel.findOne({ roomId: req.params.roomId });
-    if (!duel) return res.status(404).json({ message: "Duel not found" });
-    if (duel.locked) return res.status(400).json({ message: "This duel is locked — no new players can join." });
-    if (duel.status !== "WAITING") return res.status(400).json({ message: "Room is not available" });
-    if (duel.participants.length >= 2) return res.status(400).json({ message: "Room is full" });
+    const { roomId } = req.params;
 
-    duel.pendingOpponent = userId;
-    duel.status = "REQUESTED";
-    await duel.save();
-    res.json({ message: "Requested" });
+    // Atomic update: only set pendingOpponent if room is currently WAITING and unlocked
+    const duel = await Duel.findOneAndUpdate(
+      {
+        roomId,
+        status: "WAITING",
+        locked: false,
+        pendingOpponent: null,
+        participants: { $ne: userId },
+      },
+      {
+        $set: {
+          pendingOpponent: userId,
+          status: "REQUESTED",
+        },
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("pendingOpponent", "email streak focusCoins currentStatus dsaLevel techStack")
+      .populate("participants", "email leetcodeUsername");
+
+    if (!duel) {
+      return res.status(400).json({ message: "Room is full, locked, or already has a challenger." });
+    }
+
+    try {
+      getIO().to(`duel-${roomId}`).emit("opponent_requested", duel);
+      getIO().to("lobby").emit("duel_updated", duel);
+    } catch (e) {
+      console.warn("Socket broadcast error:", e.message);
+    }
+
+    res.json({ message: "Requested", duel });
   } catch (error) {
+    console.error("requestToJoin error:", error);
     res.status(500).json({ message: "Request failed" });
   }
 };
 
 export const acceptOpponent = async (req, res) => {
   try {
-    const duel = await Duel.findOne({ roomId: req.params.roomId });
-    if (!duel || !duel.pendingOpponent) return res.status(400).json({ message: "No challenger" });
-    duel.participants.push(duel.pendingOpponent);
-    duel.pendingOpponent = null;
-    duel.status = "ONGOING";
-    duel.startTime = new Date();
-    duel.locked = true;
-    await duel.save();
-    res.json({ message: "Match Started" });
+    const userId = req.user.userId;
+    const { roomId } = req.params;
+
+    // Fetch duel to check creator authorization and challenger
+    const existing = await Duel.findOne({ roomId });
+    if (!existing) return res.status(404).json({ message: "Duel not found" });
+    if (existing.creator.toString() !== userId) {
+      return res.status(403).json({ message: "Only room host can accept challengers." });
+    }
+    if (!existing.pendingOpponent) {
+      return res.status(400).json({ message: "No pending challenger to accept." });
+    }
+
+    const opponentId = existing.pendingOpponent;
+
+    // Atomic update: move pendingOpponent to participants and start match
+    const duel = await Duel.findOneAndUpdate(
+      {
+        roomId,
+        status: "REQUESTED",
+        pendingOpponent: opponentId,
+      },
+      {
+        $push: { participants: opponentId },
+        $set: {
+          pendingOpponent: null,
+          status: "ONGOING",
+          startTime: new Date(),
+          locked: true,
+        },
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("participants", "email leetcodeUsername")
+      .populate("results.user", "email");
+
+    if (!duel) {
+      return res.status(400).json({ message: "Could not start duel (match already started or cancelled)." });
+    }
+
+    try {
+      getIO().to(`duel-${roomId}`).emit("opponent_accepted", duel);
+      getIO().to("lobby").emit("duel_updated", duel);
+    } catch (e) {
+      console.warn("Socket broadcast error:", e.message);
+    }
+
+    res.json({ message: "Match Started", duel });
   } catch (error) {
+    console.error("acceptOpponent error:", error);
     res.status(500).json({ message: "Accept failed" });
   }
 };
 
 export const rejectOpponent = async (req, res) => {
   try {
-    const duel = await Duel.findOne({ roomId: req.params.roomId });
-    if (!duel) return res.status(404).json({ message: "Not found" });
-    duel.pendingOpponent = null;
-    duel.status = "WAITING";
-    await duel.save();
-    res.json({ message: "Rejected" });
+    const userId = req.user.userId;
+    const { roomId } = req.params;
+
+    const existing = await Duel.findOne({ roomId });
+    if (!existing) return res.status(404).json({ message: "Duel not found" });
+    if (existing.creator.toString() !== userId) {
+      return res.status(403).json({ message: "Only room host can reject challengers." });
+    }
+
+    const duel = await Duel.findOneAndUpdate(
+      { roomId, status: "REQUESTED" },
+      { $set: { pendingOpponent: null, status: "WAITING" } },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("participants", "email leetcodeUsername");
+
+    try {
+      getIO().to(`duel-${roomId}`).emit("opponent_rejected", { roomId, problemTitle: existing.problemTitle });
+      getIO().to("lobby").emit("duel_updated", duel);
+    } catch (e) {
+      console.warn("Socket broadcast error:", e.message);
+    }
+
+    res.json({ message: "Rejected", duel });
   } catch (error) {
+    console.error("rejectOpponent error:", error);
     res.status(500).json({ message: "Reject failed" });
   }
 };
@@ -209,7 +301,7 @@ export const verifyAndFinalize = async (req, res) => {
   try {
     const { leetcodeUsername, roomId } = req.body;
     const userId = req.user.userId;
-    const currentUser = await User.findById(userId); // ← get email from DB
+    const currentUser = await User.findById(userId);
     const duel = await Duel.findOne({ roomId });
     if (!duel) return res.status(404).json({ message: "Duel not found" });
 
@@ -233,31 +325,52 @@ export const verifyAndFinalize = async (req, res) => {
       (parseInt(validSolve.timestamp) - (duelStartUnix + 300)) / 60
     ));
 
-    if (!duel.results.some(r => r.user?.toString() === userId)) {
-      duel.results.push({ user: userId, email: currentUser.email, timeTaken });
+    // Atomic push result if not already submitted
+    let updatedDuel = await Duel.findOneAndUpdate(
+      {
+        roomId,
+        "results.user": { $ne: userId }
+      },
+      {
+        $push: {
+          results: { user: userId, email: currentUser.email, timeTaken }
+        }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("participants", "email leetcodeUsername")
+      .populate("results.user", "email");
+
+    if (!updatedDuel) {
+      updatedDuel = await Duel.findOne({ roomId })
+        .populate("creator", "email")
+        .populate("participants", "email leetcodeUsername")
+        .populate("results.user", "email");
     }
 
-    const opponentId = duel.participants.find(p => p.toString() !== userId);
-    const opponentAbandoned = duel.abandonedBy.some(a => a.toString() === opponentId?.toString());
+    const opponentId = updatedDuel.participants.find(p => p._id?.toString() !== userId && p.toString() !== userId);
+    const opponentIdStr = (opponentId?._id || opponentId)?.toString();
+    const opponentAbandoned = updatedDuel.abandonedBy.some(a => (a._id || a)?.toString() === opponentIdStr);
 
-    if (duel.results.length === 2 || opponentAbandoned) {
-      if (opponentAbandoned && duel.results.length === 1) {
-        await awardWinner(userId, currentUser.email, duel);
-      } else {
-        const [p1, p2] = duel.results;
+    if (updatedDuel.results.length === 2 || opponentAbandoned) {
+      if (opponentAbandoned && updatedDuel.results.length === 1) {
+        await awardWinner(userId, currentUser.email, updatedDuel);
+      } else if (updatedDuel.results.length === 2) {
+        const [p1, p2] = updatedDuel.results;
         const winnerId = p1.timeTaken <= p2.timeTaken ? p1.user : p2.user;
         const winnerEmail = p1.timeTaken <= p2.timeTaken ? p1.email : p2.email;
-        await awardWinner(winnerId, winnerEmail, duel);
+        await awardWinner(winnerId, winnerEmail, updatedDuel);
       }
-      duel.status = "COMPLETED";
-      for (const p of duel.participants) {
-        if (!duel.hiddenFor.map(h => h.toString()).includes(p.toString())) {
-          duel.hiddenFor.push(p);
+      updatedDuel.status = "COMPLETED";
+      for (const p of updatedDuel.participants) {
+        const pid = (p._id || p)?.toString();
+        if (!updatedDuel.hiddenFor.map(h => (h._id || h)?.toString()).includes(pid)) {
+          updatedDuel.hiddenFor.push(pid);
         }
       }
+      await updatedDuel.save();
     }
-
-    await duel.save();
 
     // Add to revision queue
     try {
@@ -274,8 +387,20 @@ export const verifyAndFinalize = async (req, res) => {
       }
     } catch (cardErr) { console.warn("Review card init failed"); }
 
-    // Mark that user solved a duel today (for streak eligibility)
     await User.findByIdAndUpdate(userId, { lastDuelSolvedAt: new Date() });
+
+    try {
+      getIO().to(`duel-${roomId}`).emit("solve_verified", {
+        userId,
+        timeTaken,
+        duel: updatedDuel,
+        winner: updatedDuel.winner,
+        status: updatedDuel.status
+      });
+      getIO().to("lobby").emit("duel_updated", updatedDuel);
+    } catch (e) {
+      console.warn("Socket broadcast error:", e.message);
+    }
 
     res.json({ success: true, timeTaken, message: "Verified! Score awarded and added to Revision Queue." });
   } catch (error) {
@@ -292,35 +417,50 @@ export const endDuel = async (req, res) => {
 
     if (duel.status === "WAITING" || duel.status === "REQUESTED") {
       await Duel.deleteOne({ roomId: req.params.roomId });
+      try {
+        getIO().to(`duel-${req.params.roomId}`).emit("duel_cancelled");
+        getIO().to("lobby").emit("duel_removed", req.params.roomId);
+      } catch (e) { }
       return res.json({ message: "Match cancelled" });
     }
 
     if (duel.status === "ONGOING") {
-      const userHasSolved = duel.results.some(r => r.user?.toString() === userId);
-      if (!duel.abandonedBy.map(a => a.toString()).includes(userId)) {
+      const userHasSolved = duel.results.some(r => (r.user?._id || r.user)?.toString() === userId);
+      if (!duel.abandonedBy.map(a => (a._id || a)?.toString()).includes(userId)) {
         duel.abandonedBy.push(userId);
       }
-      if (!duel.hiddenFor.map(h => h.toString()).includes(userId)) {
+      if (!duel.hiddenFor.map(h => (h._id || h)?.toString()).includes(userId)) {
         duel.hiddenFor.push(userId);
       }
 
-      const opponentId = duel.participants.find(p => p.toString() !== userId);
+      const opponent = duel.participants.find(p => (p._id || p)?.toString() !== userId);
+      const opponentId = (opponent?._id || opponent)?.toString();
+
       if (!userHasSolved && opponentId) {
-        const opponentSolved = duel.results.some(r => r.user?.toString() === opponentId.toString());
+        const opponentSolved = duel.results.some(r => (r.user?._id || r.user)?.toString() === opponentId);
         if (opponentSolved) {
-          const opponentResult = duel.results.find(r => r.user?.toString() === opponentId.toString());
+          const opponentResult = duel.results.find(r => (r.user?._id || r.user)?.toString() === opponentId);
           await awardWinner(opponentId, opponentResult.email, duel);
-          if (!duel.hiddenFor.map(h => h.toString()).includes(opponentId.toString())) {
+          if (!duel.hiddenFor.map(h => (h._id || h)?.toString()).includes(opponentId)) {
             duel.hiddenFor.push(opponentId);
           }
         }
       }
       await duel.save();
+
+      try {
+        getIO().to(`duel-${req.params.roomId}`).emit("opponent_abandoned", {
+          abandonedBy: userId,
+          duel
+        });
+        getIO().to("lobby").emit("duel_updated", duel);
+      } catch (e) { }
+
       return res.json({ message: "Match exited" });
     }
 
     if (duel.status === "COMPLETED") {
-      if (!duel.hiddenFor.map(h => h.toString()).includes(userId)) {
+      if (!duel.hiddenFor.map(h => (h._id || h)?.toString()).includes(userId)) {
         duel.hiddenFor.push(userId);
       }
       await duel.save();
@@ -329,6 +469,7 @@ export const endDuel = async (req, res) => {
 
     res.json({ message: "Done" });
   } catch (error) {
+    console.error("endDuel error:", error);
     res.status(500).json({ message: "End error" });
   }
 };
@@ -336,7 +477,7 @@ export const endDuel = async (req, res) => {
 export const getMyStats = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = await User.findById(userId); // ← get email from DB not JWT
+    const user = await User.findById(userId);
 
     const duels = await Duel.find({
       participants: userId,

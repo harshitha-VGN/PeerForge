@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { signup, login } from "../controllers/authController.js";
+import { signup, login, refreshToken, logout } from "../controllers/authController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import User from "../models/User.js";
 
@@ -8,6 +8,8 @@ const router = Router();
 // Authentication routes
 router.post("/signup", signup);
 router.post("/login", login);
+router.post("/refresh", refreshToken);
+router.post("/logout", logout);
 
 // Get currently authenticated user's data
 router.get("/me", authMiddleware, async (req, res) => {

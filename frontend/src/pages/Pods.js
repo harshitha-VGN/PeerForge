@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Send, Users, LogOut, MessageSquare, UserPlus, Clock, AlertTriangle, XCircle, Search, X } from 'lucide-react';
 import API from '../api';
+import socket from '../socket';
 
 const toStr = (id) => (id?._id || id)?.toString();
 
@@ -282,7 +283,7 @@ const PodCard = ({ pod, myId, onJoin, onEnter, onDismissRejection }) => {
   );
 };
 
-// ─── Pod Room ─────────────────────────────────────────────────────────────────
+// ─── Pod Room (Live Sockets) ──────────────────────────────────────────────────
 const PodRoom = ({ podId, myId, onBack }) => {
   const [pod, setPod] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -299,23 +300,72 @@ const PodRoom = ({ podId, myId, onBack }) => {
     } catch (e) { console.error(e); }
   }, [podId]);
 
-  useEffect(() => { fetchStatus(); const i = setInterval(fetchStatus, 3000); return () => clearInterval(i); }, [fetchStatus]);
+  useEffect(() => {
+    fetchStatus();
+
+    // Join Pod Socket Room
+    socket.emit("join_pod", podId);
+
+    const handleReceiveMessage = (newMsg) => {
+      setMessages((prev) => {
+        // Prevent duplicate message addition
+        if (prev.some((m) => m._id && newMsg._id && m._id === newMsg._id)) return prev;
+        return [...prev, newMsg];
+      });
+    };
+
+    const handlePodUpdated = (updatedPod) => {
+      setPod(updatedPod);
+    };
+
+    const handlePodRequestReceived = () => {
+      fetchStatus();
+    };
+
+    const handlePodClosed = () => {
+      alert("This pod has been closed.");
+      onBack();
+    };
+
+    socket.on("receive_pod_message", handleReceiveMessage);
+    socket.on("pod_updated", handlePodUpdated);
+    socket.on("pod_request_received", handlePodRequestReceived);
+    socket.on("pod_closed", handlePodClosed);
+
+    return () => {
+      socket.emit("leave_pod", podId);
+      socket.off("receive_pod_message", handleReceiveMessage);
+      socket.off("pod_updated", handlePodUpdated);
+      socket.off("pod_request_received", handlePodRequestReceived);
+      socket.off("pod_closed", handlePodClosed);
+    };
+  }, [podId, fetchStatus, onBack]);
+
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    try { await API.post(`/pods/${podId}/message`, { content: input.trim() }); setInput(""); fetchStatus(); }
-    catch (e) { console.error(e); }
+    const content = input.trim();
+    setInput("");
+    try {
+      await API.post(`/pods/${podId}/message`, { content });
+    } catch (e) {
+      console.error(e);
+      alert("Failed to send message.");
+    }
   };
+
   const handleAccept = async (userObj) => {
     try { await API.post(`/pods/${podId}/accept`, { requestUserId: toStr(userObj) }); fetchStatus(); }
     catch { alert("Accept failed"); }
   };
+
   const handleReject = async (reason) => {
     if (!rejectTarget) return;
     try { await API.post(`/pods/${podId}/reject`, { requestUserId: toStr(rejectTarget.user), reason }); setRejectTarget(null); fetchStatus(); }
     catch { alert("Reject failed"); }
   };
+
   const handleLeave = async () => {
     const isCreator = toStr(pod?.creator) === toStr(myId);
     if (isCreator) { setShowClose(true); return; }
@@ -340,7 +390,7 @@ const PodRoom = ({ podId, myId, onBack }) => {
             <div className="h-6 w-px bg-[#2a2a38]"/>
             <div>
               <h2 className="text-xl font-head font-black uppercase italic tracking-tighter text-white">{pod.title}</h2>
-              <p className="text-accent3 text-[10px] font-mono font-bold uppercase tracking-widest">● {pod.members?.length} Members Active</p>
+              <p className="text-accent3 text-[10px] font-mono font-bold uppercase tracking-widest">● {pod.members?.length} Members Active (Live Socket)</p>
             </div>
           </div>
           <button onClick={handleLeave}
@@ -371,7 +421,7 @@ const PodRoom = ({ podId, myId, onBack }) => {
                 {messages.map((m, i) => {
                   const isMe = toStr(m.sender) === toStr(myId);
                   return (
-                    <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                    <div key={m._id || i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[75%] p-4 rounded-2xl text-sm ${isMe ? "bg-accent text-white rounded-br-none" : "bg-[#1c1c26] border border-[#2a2a38] text-gray-300 rounded-bl-none"}`}>
                         {!isMe && <div className="text-[9px] font-black uppercase text-accent mb-1">{(m.senderEmail || "").split('@')[0]}</div>}
                         {m.content}
@@ -447,7 +497,28 @@ const Pods = () => {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchPods(); const i = setInterval(fetchPods, 4000); return () => clearInterval(i); }, [fetchPods]);
+  useEffect(() => {
+    fetchPods();
+
+    socket.emit("join_lobby");
+
+    const handlePodCreated = (newPod) => {
+      setPods((prev) => [newPod, ...prev.filter((p) => p._id !== newPod._id)]);
+    };
+
+    const handlePodLobbyUpdated = (updatedPod) => {
+      setPods((prev) => prev.map((p) => (p._id === updatedPod._id ? updatedPod : p)));
+    };
+
+    socket.on("pod_created", handlePodCreated);
+    socket.on("pod_lobby_updated", handlePodLobbyUpdated);
+
+    return () => {
+      socket.emit("leave_lobby");
+      socket.off("pod_created", handlePodCreated);
+      socket.off("pod_lobby_updated", handlePodLobbyUpdated);
+    };
+  }, [fetchPods]);
 
   const handleDismissRejection = async (podId) => {
     try { await API.post(`/pods/${podId}/dismiss-rejection`); fetchPods(); } catch (e) { console.error(e); }
@@ -484,7 +555,7 @@ const Pods = () => {
       <header className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-head font-black italic uppercase tracking-tighter">Study Pods</h1>
-          <p className="text-muted text-sm mt-1 uppercase font-mono tracking-widest">Collaborative Coding Units</p>
+          <p className="text-muted text-sm mt-1 uppercase font-mono tracking-widest">Collaborative Coding Units (Real-Time Push)</p>
         </div>
         <button onClick={() => setShowCreate(true)}
           className="bg-accent px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 transition shadow-xl shadow-accent/20 flex items-center gap-2">

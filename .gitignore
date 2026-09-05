@@ -32,3 +32,4 @@ frontend/.env.local
 .eslintcache
 coverage/
 *.swp
+INTERVIEW_PREP.md

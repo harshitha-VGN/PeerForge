@@ -1,5 +1,6 @@
 import Pod from "../models/Pod.js";
 import User from "../models/User.js";
+import { getIO } from "../socket.js";
 
 // Create a new pod (project team)
 export const createPod = async (req, res) => {
@@ -11,7 +12,6 @@ export const createPod = async (req, res) => {
 
     const { title, idea, techStack, maxMembers, tags } = req.body;
 
-    // Basic validation
     if (!title || !idea)
       return res.status(400).json({ message: "Title and idea are required" });
 
@@ -23,10 +23,14 @@ export const createPod = async (req, res) => {
       tags: tags || [],
       creator: userId,
       creatorEmail: user.email,
-      members: [userId], // creator automatically becomes first member
+      members: [userId],
       status: "OPEN",
       lastActivityAt: new Date(),
     });
+
+    try {
+      getIO().to("lobby").emit("pod_created", pod);
+    } catch (e) {}
 
     res.status(201).json(pod);
   } catch (err) {
@@ -40,34 +44,51 @@ export const acceptRequest = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { requestUserId } = req.body;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const targetId = requestUserId?.toString();
+    if (!targetId) return res.status(400).json({ message: "Missing requestUserId" });
+
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // Only the creator can approve requests
     if (pod.creator.toString() !== userId)
       return res.status(403).json({ message: "Only creator can accept" });
-
-    const targetId = requestUserId.toString();
 
     if (pod.members.some(m => m.toString() === targetId))
       return res.status(400).json({ message: "Already a member" });
 
-    // Remove from pending requests
-    pod.pendingRequests = pod.pendingRequests.filter(
-      r => r.user.toString() !== targetId
-    );
+    if (pod.members.length >= pod.maxMembers) {
+      return res.status(400).json({ message: "Pod is already at max capacity" });
+    }
 
-    pod.members.push(targetId);
+    // Atomic update: remove from pending and push to members
+    const updatedPod = await Pod.findOneAndUpdate(
+      {
+        _id: podId,
+        creator: userId,
+        members: { $ne: targetId },
+      },
+      {
+        $pull: { pendingRequests: { user: targetId } },
+        $push: { members: targetId },
+        $set: {
+          lastActivityAt: new Date(),
+          status: pod.members.length + 1 >= pod.maxMembers ? "FULL" : "OPEN"
+        }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("members", "email")
+      .populate("pendingRequests.user", "email techStack dsaLevel currentStatus codingExperienceYears bio");
 
-    // Mark pod FULL if max capacity reached
-    if (pod.members.length >= pod.maxMembers) pod.status = "FULL";
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_updated", updatedPod);
+      getIO().to("lobby").emit("pod_lobby_updated", updatedPod);
+    } catch (e) {}
 
-    pod.lastActivityAt = new Date();
-
-    await pod.save();
-
-    res.json({ message: "Member accepted!" });
+    res.json({ message: "Member accepted!", pod: updatedPod });
   } catch (err) {
     console.error("acceptRequest:", err);
     res.status(500).json({ message: "Accept failed" });
@@ -78,42 +99,43 @@ export const rejectRequest = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { requestUserId, reason } = req.body;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // Only creator can reject join requests
     if (pod.creator.toString() !== userId)
       return res.status(403).json({ message: "Only creator can reject" });
 
-    // Find the pending request to capture email
     const pending = pod.pendingRequests.find(
-      r => r.user.toString() === requestUserId
+      r => r.user?.toString() === requestUserId
     );
 
-    // Remove request from pending list
-    pod.pendingRequests = pod.pendingRequests.filter(
-      r => r.user.toString() !== requestUserId
-    );
+    const updatedPod = await Pod.findOneAndUpdate(
+      { _id: podId, creator: userId },
+      {
+        $pull: { pendingRequests: { user: requestUserId } },
+        $push: {
+          rejectedUsers: {
+            user: requestUserId,
+            email: pending?.email || "",
+            reason: reason || "Not a fit for this project right now.",
+            rejectedAt: new Date(),
+          }
+        }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("members", "email")
+      .populate("pendingRequests.user", "email techStack dsaLevel currentStatus codingExperienceYears bio");
 
-    // Store rejection record so user can see notification
-    if (pending) {
-      pod.rejectedUsers = pod.rejectedUsers || [];
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_updated", updatedPod);
+      getIO().to("lobby").emit("pod_lobby_updated", updatedPod);
+    } catch (e) {}
 
-      // Avoid duplicate rejection records
-      if (!pod.rejectedUsers.some(r => r.user.toString() === requestUserId)) {
-        pod.rejectedUsers.push({
-          user: requestUserId,
-          email: pending.email,
-          reason: reason || "Not a fit for this project right now.",
-          rejectedAt: new Date(),
-        });
-      }
-    }
-
-    await pod.save();
-
-    res.json({ message: "Request rejected" });
+    res.json({ message: "Request rejected", pod: updatedPod });
   } catch (err) {
     console.error("rejectRequest:", err);
     res.status(500).json({ message: "Reject failed" });
@@ -125,15 +147,13 @@ export const dismissRejection = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const pod = await Pod.findById(req.params.id);
-    if (!pod) return res.status(404).json({ message: "Pod not found" });
-
-    // Remove rejection notice for this user
-    pod.rejectedUsers = (pod.rejectedUsers || []).filter(
-      r => r.user.toString() !== userId
+    const pod = await Pod.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { rejectedUsers: { user: userId } } },
+      { new: true }
     );
 
-    await pod.save();
+    if (!pod) return res.status(404).json({ message: "Pod not found" });
 
     res.json({ message: "Dismissed" });
   } catch (err) {
@@ -145,40 +165,55 @@ export const dismissRejection = async (req, res) => {
 export const requestToJoin = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
     if (pod.status === "CLOSED")
       return res.status(400).json({ message: "This pod is closed." });
 
-    if (pod.status === "FULL")
+    if (pod.status === "FULL" || pod.members.length >= pod.maxMembers)
       return res.status(400).json({ message: "This pod is full." });
 
     if (pod.members.some(m => m.toString() === userId))
       return res.status(400).json({ message: "You are already a member." });
 
-    if (pod.pendingRequests.some(r => r.user.toString() === userId))
+    if (pod.pendingRequests.some(r => r.user?.toString() === userId))
       return res.status(400).json({ message: "You already sent a request." });
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Add request to pending queue
-    pod.pendingRequests.push({
-      user: userId,
-      email: user.email,
-      message: req.body.message || "",
-    });
+    // Atomic push to pending requests and pull from rejected
+    const updatedPod = await Pod.findByIdAndUpdate(
+      podId,
+      {
+        $push: {
+          pendingRequests: {
+            user: userId,
+            email: user.email,
+            message: req.body.message || "",
+            requestedAt: new Date(),
+          }
+        },
+        $pull: { rejectedUsers: { user: userId } }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("members", "email")
+      .populate("pendingRequests.user", "email techStack dsaLevel currentStatus codingExperienceYears bio");
 
-    // If user was previously rejected and applies again, clear rejection record
-    pod.rejectedUsers = (pod.rejectedUsers || []).filter(
-      r => r.user.toString() !== userId
-    );
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_request_received", {
+        podId,
+        request: { user: userId, email: user.email, message: req.body.message || "" }
+      });
+      getIO().to("lobby").emit("pod_lobby_updated", updatedPod);
+    } catch (e) {}
 
-    await pod.save();
-
-    res.json({ message: "Join request sent!" });
+    res.json({ message: "Join request sent!", pod: updatedPod });
   } catch (err) {
     console.error("requestToJoin:", err);
     res.status(500).json({ message: "Request failed", detail: err.message });
@@ -188,32 +223,41 @@ export const requestToJoin = async (req, res) => {
 export const requestLeave = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
     if (!pod.members.some(m => m.toString() === userId))
       return res.status(403).json({ message: "Not a member" });
 
-    // Creator must close pod instead of leaving
     if (pod.creator.toString() === userId)
       return res.status(400).json({
         message: "Creator should use Close Pod instead.",
       });
 
-    if ((pod.leaveRequests || []).some(r => r.user.toString() === userId))
+    if ((pod.leaveRequests || []).some(r => r.user?.toString() === userId))
       return res.status(400).json({ message: "Already requested to leave." });
 
     const user = await User.findById(userId);
 
-    pod.leaveRequests = pod.leaveRequests || [];
+    const updatedPod = await Pod.findByIdAndUpdate(
+      podId,
+      {
+        $push: {
+          leaveRequests: {
+            user: userId,
+            email: user.email,
+            requestedAt: new Date(),
+          }
+        }
+      },
+      { new: true }
+    );
 
-    pod.leaveRequests.push({
-      user: userId,
-      email: user.email,
-    });
-
-    await pod.save();
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_updated", updatedPod);
+    } catch (e) {}
 
     res.json({ message: "Leave request submitted." });
   } catch (err) {
@@ -226,29 +270,37 @@ export const approveLeave = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { leaveUserId } = req.body;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // Only creator can approve member leaving
     if (pod.creator.toString() !== userId)
       return res.status(403).json({
         message: "Only creator can approve leave",
       });
 
-    pod.members = pod.members.filter(m => m.toString() !== leaveUserId);
+    const updatedPod = await Pod.findByIdAndUpdate(
+      podId,
+      {
+        $pull: {
+          members: leaveUserId,
+          leaveRequests: { user: leaveUserId }
+        },
+        $set: {
+          status: "OPEN",
+          lastActivityAt: new Date(),
+        }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("members", "email");
 
-    pod.leaveRequests = (pod.leaveRequests || []).filter(
-      r => r.user.toString() !== leaveUserId
-    );
-
-    // Reopen pod if it was FULL and now has space
-    if (pod.status === "FULL" && pod.members.length < pod.maxMembers)
-      pod.status = "OPEN";
-
-    pod.lastActivityAt = new Date();
-
-    await pod.save();
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_updated", updatedPod);
+      getIO().to("lobby").emit("pod_lobby_updated", updatedPod);
+    } catch (e) {}
 
     res.json({ message: "Member removed." });
   } catch (err) {
@@ -260,13 +312,12 @@ export const approveLeave = async (req, res) => {
 export const closePod = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const podId = req.params.id;
 
     const user = await User.findById(userId);
-
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // Only creator can close the pod
     if (pod.creator.toString() !== userId)
       return res.status(403).json({ message: "Only creator can close" });
 
@@ -276,6 +327,11 @@ export const closePod = async (req, res) => {
     pod.closedByEmail = user.email;
 
     await pod.save();
+
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_closed", { podId, projectLink: pod.projectLink });
+      getIO().to("lobby").emit("pod_lobby_updated", pod);
+    } catch (e) {}
 
     res.json({ message: "Pod closed and added to Hall of Fame!" });
   } catch (err) {
@@ -288,7 +344,7 @@ export const getClosedPods = async (req, res) => {
   try {
     const pods = await Pod.find({ status: "CLOSED" })
       .populate("members", "email")
-      .select("-messages") // exclude chat messages
+      .select("-messages")
       .sort({ closedAt: -1 });
 
     res.json(pods);
@@ -305,7 +361,7 @@ export const getAllPods = async (req, res) => {
     const pods = await Pod.find({
       $or: [
         { status: { $in: ["OPEN", "FULL"] } },
-        { "rejectedUsers.user": userId }, // allow rejected users to see rejection message
+        { "rejectedUsers.user": userId },
       ],
     })
       .populate("creator", "email")
@@ -352,10 +408,8 @@ export const getPod = async (req, res) => {
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
     const userId = req.user.userId;
-
     const isMember = pod.members.some(m => m._id.toString() === userId);
 
-    // Non-members cannot view pod chat messages
     if (!isMember) {
       const safeData = pod.toObject();
       safeData.messages = [];
@@ -373,32 +427,46 @@ export const sendMessage = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { content } = req.body;
+    const podId = req.params.id;
 
     if (!content?.trim())
       return res.status(400).json({ message: "Empty message" });
 
-    const pod = await Pod.findById(req.params.id);
-    if (!pod) return res.status(404).json({ message: "Pod not found" });
-
-    // Only members can send messages
-    if (!pod.members.some(m => m.toString() === userId))
-      return res.status(403).json({ message: "Not a member" });
-
     const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    pod.messages.push({
+    const messageObj = {
       sender: userId,
       senderEmail: user.email,
       content: content.trim(),
-    });
+      createdAt: new Date(),
+    };
 
-    pod.lastActivityAt = new Date();
+    // Atomic append to messages array
+    const updatedPod = await Pod.findOneAndUpdate(
+      { _id: podId, members: userId },
+      {
+        $push: { messages: messageObj },
+        $set: { lastActivityAt: new Date() },
+      },
+      { new: true }
+    ).populate("messages.sender", "email");
 
-    await pod.save();
+    if (!updatedPod) {
+      return res.status(403).json({ message: "Not an active member of this pod" });
+    }
+
+    const savedMessage = updatedPod.messages[updatedPod.messages.length - 1];
+
+    try {
+      getIO().to(`pod-${podId}`).emit("receive_pod_message", savedMessage);
+    } catch (e) {
+      console.warn("Socket message emit error:", e.message);
+    }
 
     res.json({
       message: "Sent",
-      data: pod.messages[pod.messages.length - 1],
+      data: savedMessage,
     });
   } catch (err) {
     console.error("sendMessage:", err);
@@ -417,11 +485,9 @@ export const getMessages = async (req, res) => {
 
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // Only members can read messages
     if (!pod.members.some(m => m._id.toString() === userId))
       return res.status(403).json({ message: "Not a member" });
 
-    // Return last 100 messages
     res.json(pod.messages.slice(-100));
   } catch (err) {
     console.error("getMessages:", err);
@@ -432,26 +498,40 @@ export const getMessages = async (req, res) => {
 export const leavePod = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const podId = req.params.id;
 
-    const pod = await Pod.findById(req.params.id);
+    const pod = await Pod.findById(podId);
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    // If creator leaves, pod automatically closes
     if (pod.creator.toString() === userId) {
       pod.status = "CLOSED";
       pod.closedAt = new Date();
-
       await pod.save();
-
+      try {
+        getIO().to(`pod-${podId}`).emit("pod_closed", { podId });
+        getIO().to("lobby").emit("pod_lobby_updated", pod);
+      } catch (e) {}
       return res.json({ message: "Pod closed" });
     }
 
-    pod.members = pod.members.filter(m => m.toString() !== userId);
+    const updatedPod = await Pod.findByIdAndUpdate(
+      podId,
+      {
+        $pull: { members: userId },
+        $set: {
+          status: "OPEN",
+          lastActivityAt: new Date(),
+        }
+      },
+      { new: true }
+    )
+      .populate("creator", "email")
+      .populate("members", "email");
 
-    if (pod.status === "FULL" && pod.members.length < pod.maxMembers)
-      pod.status = "OPEN";
-
-    await pod.save();
+    try {
+      getIO().to(`pod-${podId}`).emit("pod_updated", updatedPod);
+      getIO().to("lobby").emit("pod_lobby_updated", updatedPod);
+    } catch (e) {}
 
     res.json({ message: "Left pod" });
   } catch (err) {

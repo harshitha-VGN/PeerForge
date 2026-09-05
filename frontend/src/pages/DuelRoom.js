@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, XCircle, Trophy, Loader2, Plus, AlertCircle, Timer, UserX } from 'lucide-react';
 import API from '../api';
+import socket from '../socket';
 
 const DuelRoom = () => {
   const { roomId } = useParams();
@@ -16,8 +17,7 @@ const DuelRoom = () => {
 
   const userRef = useRef(null);
   const mountedRef = useRef(true);
-  const intervalRef = useRef(null);
-  const duelRef = useRef(null); // track previous duel to detect changes
+  const duelRef = useRef(null);
 
   const fetchStatus = useCallback(async () => {
     const currentUser = userRef.current;
@@ -33,16 +33,13 @@ const DuelRoom = () => {
       const isParticipant = data.participants?.some(p => (p._id || p)?.toString() === myId);
       const isPending = pendingId === myId;
 
-      // Only redirect to lobby if: WAITING + not creator + not participant + not pending + we already had duel loaded (rejected)
       if (data.status === 'WAITING' && myId !== creatorId && !isParticipant && !isPending) {
         if (duelRef.current !== null) {
-          // Navigate with rejection state so DuelLobby can show the toast
           navigateRef.current('/duel', { state: { rejected: true, problemTitle: duelRef.current.problemTitle } });
           return;
         }
       }
 
-      // Detect opponent left
       if (data.status === 'ONGOING') {
         const opponentParticipant = data.participants?.find(p => (p._id || p)?.toString() !== myId);
         const opponentIdStr = (opponentParticipant?._id || opponentParticipant)?.toString();
@@ -68,17 +65,76 @@ const DuelRoom = () => {
         userRef.current = res.data;
         setUser(res.data);
         await fetchStatus();
-        intervalRef.current = setInterval(fetchStatus, 3000);
+
+        // ── Connect Sockets for Real-time push ──────────────────────────────
+        socket.emit("join_duel", roomId);
+
+        const handleOpponentRequested = (updatedDuel) => {
+          setDuel(updatedDuel);
+          duelRef.current = updatedDuel;
+        };
+
+        const handleOpponentAccepted = (updatedDuel) => {
+          setDuel(updatedDuel);
+          duelRef.current = updatedDuel;
+        };
+
+        const handleOpponentRejected = (data) => {
+          const myId = userRef.current?._id?.toString();
+          const hostId = (duelRef.current?.creator?._id || duelRef.current?.creator)?.toString();
+          if (myId !== hostId) {
+            navigateRef.current('/duel', { state: { rejected: true, problemTitle: data.problemTitle } });
+          } else {
+            fetchStatus();
+          }
+        };
+
+        const handleSolveVerified = ({ duel: updatedDuel }) => {
+          if (updatedDuel) {
+            setDuel(updatedDuel);
+            duelRef.current = updatedDuel;
+          } else {
+            fetchStatus();
+          }
+        };
+
+        const handleOpponentAbandoned = ({ duel: updatedDuel }) => {
+          setOpponentLeft(true);
+          if (updatedDuel) {
+            setDuel(updatedDuel);
+            duelRef.current = updatedDuel;
+          }
+        };
+
+        const handleDuelCancelled = () => {
+          alert("Duel room was cancelled by host.");
+          navigateRef.current('/duel');
+        };
+
+        socket.on("opponent_requested", handleOpponentRequested);
+        socket.on("opponent_accepted", handleOpponentAccepted);
+        socket.on("opponent_rejected", handleOpponentRejected);
+        socket.on("solve_verified", handleSolveVerified);
+        socket.on("opponent_abandoned", handleOpponentAbandoned);
+        socket.on("duel_cancelled", handleDuelCancelled);
+
       } catch {
         if (mountedRef.current) navigateRef.current('/login');
       }
     };
     init();
+
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      socket.emit("leave_duel", roomId);
+      socket.off("opponent_requested");
+      socket.off("opponent_accepted");
+      socket.off("opponent_rejected");
+      socket.off("solve_verified");
+      socket.off("opponent_abandoned");
+      socket.off("duel_cancelled");
     };
-  }, [fetchStatus]);
+  }, [roomId, fetchStatus]);
 
   const myId = user?._id?.toString();
   const hostId = (duel?.creator?._id || duel?.creator)?.toString();
@@ -100,13 +156,13 @@ const DuelRoom = () => {
   const iHaveSolved = hasUserSolved(myId);
 
   const handleAccept = async () => {
-    try { await API.post(`/duels/accept/${roomId}`); fetchStatus(); }
+    try { await API.post(`/duels/accept/${roomId}`); }
     catch { alert('Accept failed'); }
   };
 
   const handleReject = async () => {
     if (window.confirm('Reject this challenger? Room reopens for others.')) {
-      try { await API.post(`/duels/reject/${roomId}`); fetchStatus(); }
+      try { await API.post(`/duels/reject/${roomId}`); }
       catch { alert('Reject failed'); }
     }
   };
@@ -117,19 +173,16 @@ const DuelRoom = () => {
     try {
       const res = await API.post('/duels/verify', { leetcodeUsername: user.leetcodeUsername, roomId });
       alert(res.data.message);
-      fetchStatus();
     } catch (err) {
       alert(err.response?.data?.message || 'Verification failed.');
     } finally { setIsFinishing(false); }
   };
 
   const handleQuit = async () => {
-    // ── Smart quit message based on situation ──────────────────────────────────
     let msg;
     if (iHaveSolved) {
       msg = 'Exit room? Your win is already recorded ✓';
     } else if (opponentLeft) {
-      // Opponent already abandoned — no risk to the user
       msg = 'Exit room? Opponent already left — no penalty for you.';
     } else {
       msg = 'Quit match? Opponent can still solve and earn points if you leave.';
@@ -144,7 +197,7 @@ const DuelRoom = () => {
     return (
       <div className="min-h-screen bg-[#0c0c0f] flex flex-col items-center justify-center font-mono text-accent uppercase text-xs tracking-widest">
         <Loader2 className="animate-spin mb-4" size={32} />
-        Syncing Battle Sequence...
+        Syncing Battle Sequence (Live WebSockets)...
       </div>
     );
   }
@@ -187,7 +240,7 @@ const DuelRoom = () => {
 
           {duel.status === 'WAITING' && (
             <div className="animate-pulse opacity-30 font-black tracking-[0.3em] uppercase italic">
-              Waiting for Challenger...
+              Waiting for Challenger (Listening Live)...
             </div>
           )}
 
@@ -208,7 +261,7 @@ const DuelRoom = () => {
           {duel.status === 'REQUESTED' && !amIHost && (
             <div className="text-accent4 animate-pulse flex flex-col items-center">
               <Timer size={60} className="mb-6" />
-              <div className="uppercase tracking-[0.2em] font-mono text-sm font-bold italic">Awaiting Host Approval...</div>
+              <div className="uppercase tracking-[0.2em] font-mono text-sm font-bold italic">Awaiting Host Approval (Live)...</div>
             </div>
           )}
 
@@ -218,7 +271,7 @@ const DuelRoom = () => {
                 {opponentLeft ? 'SOLVE TO WIN' : 'BATTLE LIVE'}
               </h2>
               <p className="text-accent3 font-mono text-[10px] mb-10 tracking-[0.3em] font-bold uppercase">
-                {opponentLeft ? 'Opponent left — claim your points!' : 'Temporal Sync Active'}
+                {opponentLeft ? 'Opponent left — claim your points!' : 'Temporal WebSocket Sync Active'}
               </p>
 
               <a href={`https://leetcode.com/problems/${duel.problemSlug}/`} target="_blank" rel="noreferrer"
