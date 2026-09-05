@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import API from '../api';
 import socket from '../socket';
 import { useNavigate } from 'react-router-dom';
-import { Swords, Plus, Play, Lock } from 'lucide-react';
+import { Swords, Plus, Play, Lock, ChevronDown } from 'lucide-react';
+
 
 const DuelLobby = () => {
   const [rooms, setRooms] = useState([]);
@@ -102,23 +103,27 @@ const DuelLobby = () => {
         <div className="flex gap-3 w-full md:w-auto">
 
           {/* Category selector */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-bg border border-border p-3 rounded-xl text-white outline-none focus:border-accent text-sm font-bold md:w-48"
-          >
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <div className="relative w-full md:w-48">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full bg-[#0c0c0f] border border-[#2a2a38] pl-4 pr-10 py-3 rounded-xl text-white outline-none focus:border-accent text-sm font-bold appearance-none cursor-pointer"
+            >
+              {categories.map(c => (
+                <option key={c} value={c} className="bg-[#14141a] text-white">{c}</option>
+              ))}
+            </select>
+            <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
 
           {/* Create duel button */}
           <button
             onClick={handleCreate}
-            className="bg-accent px-8 py-3 rounded-xl font-black hover:scale-105 transition flex items-center gap-2"
+            className="bg-accent px-8 py-3 rounded-xl font-black hover:scale-105 transition flex items-center justify-center gap-2"
           >
             <Plus size={18}/> CREATE DUEL
           </button>
+
 
         </div>
       </div>

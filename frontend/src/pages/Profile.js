@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../api';
-import { User, Code2, Briefcase, Github, Linkedin, Globe, Plus, Trash2, Save, Sparkles, CheckCircle2, Award, Flame, Coins, Swords } from 'lucide-react';
+import { User, Code2, Briefcase, Github, Linkedin, Globe, Plus, Trash2, Save, Sparkles, CheckCircle2, Award, Flame, Coins, Swords, ChevronDown } from 'lucide-react';
 
 const TECH_OPTIONS = [
   "React", "Vue", "Angular", "Next.js", "TypeScript", "JavaScript",
@@ -227,14 +227,21 @@ const Profile = () => {
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-300 mb-2 block">Current Status</label>
-              <select
-                value={form.currentStatus}
-                onChange={e => setForm(f => ({ ...f, currentStatus: e.target.value }))}
-                className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer"
-              >
-                <option value="">Select your status...</option>
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="relative">
+                <select
+                  value={form.currentStatus}
+                  onChange={e => setForm(f => ({ ...f, currentStatus: e.target.value }))}
+                  className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl pl-4 pr-10 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer appearance-none"
+                >
+                  <option value="" className="bg-[#14141a] text-gray-400">Select your status...</option>
+                  {STATUS_OPTIONS.map(s => (
+                    <option key={s} value={s} className="bg-[#14141a] text-white">
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
           </div>
 
@@ -262,26 +269,38 @@ const Profile = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
             <div>
               <label className="text-xs font-semibold text-gray-300 mb-2 block">DSA Skill Level</label>
-              <select
-                value={form.dsaLevel}
-                onChange={e => setForm(f => ({ ...f, dsaLevel: e.target.value }))}
-                className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer"
-              >
-                <option value="">Select level...</option>
-                {DSA_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+              <div className="relative">
+                <select
+                  value={form.dsaLevel}
+                  onChange={e => setForm(f => ({ ...f, dsaLevel: e.target.value }))}
+                  className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl pl-4 pr-10 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer appearance-none"
+                >
+                  <option value="" className="bg-[#14141a] text-gray-400">Select level...</option>
+                  {DSA_LEVELS.map(l => (
+                    <option key={l} value={l} className="bg-[#14141a] text-white">
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-300 mb-2 block">Coding Experience</label>
-              <select
-                value={form.codingExperienceYears}
-                onChange={e => setForm(f => ({ ...f, codingExperienceYears: Number(e.target.value) }))}
-                className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer"
-              >
-                {[0, 1, 2, 3, 4, 5].map(n => (
-                  <option key={n} value={n}>{n === 0 ? '< 1 year' : n === 5 ? '5+ years' : `${n} year${n > 1 ? 's' : ''}`}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={form.codingExperienceYears}
+                  onChange={e => setForm(f => ({ ...f, codingExperienceYears: Number(e.target.value) }))}
+                  className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl pl-4 pr-10 py-3 text-white text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer appearance-none"
+                >
+                  {[0, 1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n} className="bg-[#14141a] text-white">
+                      {n === 0 ? '< 1 year' : n === 5 ? '5+ years' : `${n} year${n > 1 ? 's' : ''}`}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-300 mb-2 block">
@@ -295,6 +314,7 @@ const Profile = () => {
               />
             </div>
           </div>
+
 
           {/* Tech Stack */}
           <div>
