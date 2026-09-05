@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+*, *::before, *::after {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
 
 
 body {
@@ -18,6 +21,7 @@ select {
   -moz-appearance: none;
   appearance: none;
 }
+
 
 
 

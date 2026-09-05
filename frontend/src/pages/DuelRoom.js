@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Swords, XCircle, Trophy, Loader2, Plus, AlertCircle, Timer, UserX } from 'lucide-react';
+import { Swords, XCircle, Trophy, Loader2, Plus, AlertCircle, Timer, UserX, ExternalLink, CheckCircle2 } from 'lucide-react';
 import API from '../api';
 import socket from '../socket';
 
@@ -195,194 +195,284 @@ const DuelRoom = () => {
 
   if (!duel || !user) {
     return (
-      <div className="min-h-screen bg-[#0c0c0f] flex flex-col items-center justify-center font-mono text-accent uppercase text-xs tracking-widest">
-        <Loader2 className="animate-spin mb-4" size={32} />
-        Syncing Battle Sequence (Live WebSockets)...
+      <div className="min-h-[calc(100vh-64px)] bg-[#0c0c0f] flex flex-col items-center justify-center text-accent text-sm font-semibold gap-3">
+        <Loader2 className="animate-spin" size={32} />
+        <span>Connecting to Live Battle Room...</span>
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto font-body text-white min-h-screen">
-
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-10 border-b border-border pb-8">
-        <div className="flex items-center gap-4">
-          <div className="bg-accent2/10 p-3 rounded-xl border border-accent2/20 text-accent2"><Swords /></div>
-          <h1 className="text-2xl font-head font-black italic uppercase tracking-tighter">
-            WAR ROOM: <span className="text-accent2">
-              {duel.status === 'ONGOING' || duel.status === 'COMPLETED' ? duel.problemTitle : '???'}
-            </span>
-          </h1>
-        </div>
-        <button onClick={handleQuit} className="text-[10px] font-mono text-muted hover:text-accent2 border border-border px-6 py-2 rounded-xl transition uppercase tracking-widest flex items-center gap-2">
-          <XCircle size={14} /> {iHaveSolved || opponentLeft ? 'Exit Room' : 'Quit Duel'}
-        </button>
-      </div>
-
-      {/* Opponent left banner */}
-      {opponentLeft && duel.status === 'ONGOING' && (
-        <div className="mb-8 bg-accent4/10 border border-accent4/30 rounded-2xl p-5 flex items-center gap-4">
-          <UserX className="text-accent4 shrink-0" size={20} />
-          <div>
-            <p className="font-black text-accent4 text-sm uppercase">Opponent left the match!</p>
-            <p className="text-muted text-xs font-mono mt-0.5">
-              {iHaveSolved ? 'You already solved — exit freely.' : 'Submit your solution to claim the win.'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-
-        {/* CENTER STAGE */}
-        <div className="bg-surface border border-border p-10 rounded-[2.5rem] shadow-2xl flex flex-col justify-center items-center text-center min-h-[480px]">
-
-          {duel.status === 'WAITING' && (
-            <div className="animate-pulse opacity-30 font-black tracking-[0.3em] uppercase italic">
-              Waiting for Challenger (Listening Live)...
+    <div className="min-h-screen bg-[#0c0c0f] text-white py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-[#2a2a38]">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-accent2/10 border border-accent2/20 flex items-center justify-center text-accent2 shadow-md">
+              <Swords size={20} />
             </div>
-          )}
-
-          {duel.status === 'REQUESTED' && amIHost && (
-            <div className="w-full bg-accent/10 border border-accent/30 p-10 rounded-[2rem]">
-              <div className="text-accent font-black text-xs mb-4 uppercase tracking-[0.2em]">New Challenger Spotted</div>
-              <div className="text-3xl font-black mb-2">{challengerEmail?.split('@')[0]}</div>
-              <div className="text-[10px] text-muted font-mono mb-8 uppercase tracking-widest">
-                Streak: 🔥 {duel.pendingOpponent?.streak || 0} &nbsp;|&nbsp; Coins: 🪙 {duel.pendingOpponent?.focusCoins || 0}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  {duel.status === 'ONGOING' || duel.status === 'COMPLETED' ? duel.problemTitle : 'Duel Arena'}
+                </h1>
+                {duel.difficulty && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-accent4/10 text-accent4 border border-accent4/20">
+                    {duel.difficulty}
+                  </span>
+                )}
               </div>
-              <div className="flex gap-4">
-                <button onClick={handleAccept} className="flex-1 py-4 bg-accent text-white rounded-2xl font-black hover:opacity-90 transition">ACCEPT</button>
-                <button onClick={handleReject} className="flex-1 py-4 border border-accent2 text-accent2 rounded-2xl font-black hover:bg-accent2/10 transition">REJECT</button>
-              </div>
-            </div>
-          )}
-
-          {duel.status === 'REQUESTED' && !amIHost && (
-            <div className="text-accent4 animate-pulse flex flex-col items-center">
-              <Timer size={60} className="mb-6" />
-              <div className="uppercase tracking-[0.2em] font-mono text-sm font-bold italic">Awaiting Host Approval (Live)...</div>
-            </div>
-          )}
-
-          {(duel.status === 'ONGOING' || (duel.status === 'COMPLETED' && !iHaveSolved)) && (
-            <div className="w-full">
-              <h2 className="text-5xl font-head font-black italic mb-2 uppercase tracking-tighter">
-                {opponentLeft ? 'SOLVE TO WIN' : 'BATTLE LIVE'}
-              </h2>
-              <p className="text-accent3 font-mono text-[10px] mb-10 tracking-[0.3em] font-bold uppercase">
-                {opponentLeft ? 'Opponent left — claim your points!' : 'Temporal WebSocket Sync Active'}
+              <p className="text-xs text-gray-400 mt-0.5">
+                Room #{roomId.slice(-6)} · Real-time WebSocket Battle
               </p>
+            </div>
+          </div>
 
-              <a href={`https://leetcode.com/problems/${duel.problemSlug}/`} target="_blank" rel="noreferrer"
-                className="bg-white text-black w-full py-5 rounded-2xl font-black flex items-center justify-center gap-3 mb-4 hover:scale-[1.01] transition shadow-2xl uppercase tracking-widest">
-                OPEN ON LEETCODE
-              </a>
+          <button 
+            onClick={handleQuit} 
+            className="self-start sm:self-auto inline-flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-accent2 border border-[#2a2a38] bg-[#14141a] px-4 py-2.5 rounded-xl hover:border-accent2/40 transition shadow-md"
+          >
+            <XCircle size={15} /> 
+            <span>{iHaveSolved || opponentLeft ? 'Exit Arena' : 'Quit Duel'}</span>
+          </button>
+        </div>
 
-              {iHaveSolved ? (
-                <div className="space-y-4">
-                  <div className="py-5 bg-accent3/10 text-accent3 border-2 border-accent3/30 rounded-2xl font-black uppercase text-sm tracking-widest">SOLVE VERIFIED ✓</div>
-                  <button onClick={handleQuit} className="w-full py-4 border-2 border-accent text-accent rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-accent hover:text-white transition uppercase text-xs tracking-widest">
-                    <Plus size={16} /> Exit & Start New Duel
+        {/* Opponent left banner */}
+        {opponentLeft && duel.status === 'ONGOING' && (
+          <div className="mb-6 bg-accent4/10 border border-accent4/30 rounded-2xl p-4 flex items-center gap-3.5 shadow-lg">
+            <UserX className="text-accent4 shrink-0" size={20} />
+            <div>
+              <p className="font-semibold text-accent4 text-sm">Opponent left the match</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                {iHaveSolved ? 'You already solved — feel free to exit.' : 'Submit your solution on LeetCode to claim the win points.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* CENTER STAGE */}
+          <div className="lg:col-span-7 bg-[#14141a] border border-[#2a2a38] p-8 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center min-h-[440px]">
+            {duel.status === 'WAITING' && (
+              <div className="space-y-4 py-8">
+                <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mx-auto animate-pulse">
+                  <Swords size={28} />
+                </div>
+                <h3 className="text-lg font-bold text-white">Waiting for Challenger</h3>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  Your battle room is active in the public lobby. You'll be notified the moment another developer challenges you.
+                </p>
+              </div>
+            )}
+
+            {duel.status === 'REQUESTED' && amIHost && (
+              <div className="w-full bg-[#0c0c0f] border border-accent/30 p-6 sm:p-8 rounded-2xl shadow-lg">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-accent/10 text-accent border border-accent/20 mb-4">
+                  Incoming Challenge
+                </span>
+                <div className="text-2xl font-bold text-white mb-2">{challengerEmail?.split('@')[0]}</div>
+                <div className="text-xs text-gray-400 mb-6 flex items-center justify-center gap-4">
+                  <span>Streak: 🔥 {duel.pendingOpponent?.streak || 0}</span>
+                  <span>Coins: 🪙 {duel.pendingOpponent?.focusCoins || 0}</span>
+                </div>
+                <div className="flex gap-3 max-w-xs mx-auto">
+                  <button 
+                    onClick={handleAccept} 
+                    className="flex-1 py-3 bg-accent text-white rounded-xl font-semibold hover:bg-accent/90 transition shadow-lg shadow-accent/20 text-xs"
+                  >
+                    Accept Battle
+                  </button>
+                  <button 
+                    onClick={handleReject} 
+                    className="flex-1 py-3 border border-accent2/40 text-accent2 rounded-xl font-semibold hover:bg-accent2/10 transition text-xs"
+                  >
+                    Decline
                   </button>
                 </div>
-              ) : (
-                <button onClick={handleVerify} disabled={isFinishing}
-                  className="w-full py-5 border-2 border-accent text-accent rounded-2xl font-black uppercase hover:bg-accent hover:text-white transition tracking-widest disabled:opacity-50">
-                  {isFinishing ? 'PROCESSING...' : "I'VE GOT AN 'ACCEPTED' STATUS"}
-                </button>
-              )}
-            </div>
-          )}
-
-          {duel.status === 'COMPLETED' && iHaveSolved && (
-            <div className="text-center w-full">
-              <Trophy size={80} className="mx-auto mb-6 text-accent4" />
-              <h2 className="text-4xl font-black italic uppercase tracking-tighter mb-2">Match Concluded</h2>
-              <div className="text-accent3 font-mono font-black text-xl italic uppercase tracking-widest bg-accent3/10 py-3 rounded-2xl inline-block px-10 border border-accent3/20">
-                Winner: {duel.winner?.split('@')[0] || 'Draw'}
               </div>
-              <button onClick={() => navigateRef.current('/duel')}
-                className="block mx-auto mt-10 text-muted hover:text-white text-xs underline uppercase font-mono tracking-widest">
-                Return to Lobby
-              </button>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* SIDE FEED */}
-        <div className="flex flex-col gap-4">
-          <h3 className="font-mono text-[10px] uppercase tracking-[0.4em] text-muted px-4 font-bold">Match Feed</h3>
+            {duel.status === 'REQUESTED' && !amIHost && (
+              <div className="space-y-4 py-8 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-accent4/10 border border-accent4/20 flex items-center justify-center text-accent4 mx-auto animate-pulse">
+                  <Timer size={28} />
+                </div>
+                <h3 className="text-lg font-bold text-white">Awaiting Host Approval</h3>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  Challenge request sent to room host. The duel will start immediately upon acceptance.
+                </p>
+              </div>
+            )}
 
-          {/* HOST */}
-          <div className={`p-8 rounded-[2.5rem] border transition-all duration-500 ${hasUserSolved(hostId) ? 'border-accent3 bg-accent3/5 shadow-lg' : 'bg-surface border-accent/20'}`}>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-5">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${hasUserSolved(hostId) ? 'bg-accent3 text-black' : 'bg-accent text-white'}`}>
-                  {(hostEmail || 'H')[0].toUpperCase()}
+            {(duel.status === 'ONGOING' || (duel.status === 'COMPLETED' && !iHaveSolved)) && (
+              <div className="w-full space-y-6">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                    {opponentLeft ? 'Solve to Claim Victory' : 'Battle in Progress'}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Solve the problem on LeetCode and click verify once accepted.
+                  </p>
+                </div>
+
+                <a 
+                  href={`https://leetcode.com/problems/${duel.problemSlug}/`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="w-full py-3.5 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition shadow-lg text-sm"
+                >
+                  <span>Solve on LeetCode</span>
+                  <ExternalLink size={16} />
+                </a>
+
+                {iHaveSolved ? (
+                  <div className="space-y-3">
+                    <div className="py-3 px-4 bg-accent3/10 text-accent3 border border-accent3/30 rounded-xl font-semibold text-xs flex items-center justify-center gap-2">
+                      <CheckCircle2 size={16} />
+                      <span>Solution Verified & Accepted</span>
+                    </div>
+                    <button 
+                      onClick={handleQuit} 
+                      className="w-full py-3 bg-accent text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 transition shadow-lg shadow-accent/20 text-xs"
+                    >
+                      <Plus size={16} /> 
+                      <span>Exit & Start New Duel</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={handleVerify} 
+                    disabled={isFinishing}
+                    className="w-full py-3.5 bg-accent text-white rounded-xl font-semibold hover:bg-accent/90 transition shadow-lg shadow-accent/20 text-sm disabled:opacity-50"
+                  >
+                    {isFinishing ? 'Verifying LeetCode Submissions...' : "I've Submitted an 'Accepted' Solution"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {duel.status === 'COMPLETED' && iHaveSolved && (
+              <div className="text-center w-full space-y-4 py-6">
+                <div className="w-16 h-16 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 mx-auto shadow-lg">
+                  <Trophy size={36} />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Duel Concluded</h2>
+                <div className="inline-block px-4 py-2 rounded-xl bg-accent3/10 border border-accent3/30 text-accent3 text-sm font-semibold">
+                  Winner: {duel.winner?.split('@')[0] || 'Draw'}
                 </div>
                 <div>
-                  <div className="font-bold text-lg uppercase italic tracking-tighter">{(hostEmail || 'Host').split('@')[0]} {amIHost && '(YOU)'}</div>
-                  <div className="text-[10px] text-muted font-mono uppercase">Room Host</div>
+                  <button 
+                    onClick={() => navigateRef.current('/duel')}
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-accent hover:underline mt-4"
+                  >
+                    Return to Lobby
+                  </button>
                 </div>
               </div>
-              <div className="text-right">
-                {hasUserSolved(hostId)
-                  ? <span className="text-accent3 font-mono font-black text-2xl tracking-tighter">{getSolveTime(hostId)} MINS</span>
-                  : duel.abandonedBy?.some(a => (a._id || a)?.toString() === hostId)
-                  ? <span className="text-accent2 font-bold text-[10px] uppercase">⚠ LEFT</span>
-                  : <span className={`text-accent3 font-bold text-[10px] uppercase ${duel.status === 'ONGOING' ? 'animate-pulse' : ''}`}>
-                      {duel.status === 'ONGOING' ? 'SOLVING' : 'READY'}
-                    </span>
-                }
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* CHALLENGER */}
-          <div className={`p-8 rounded-[2.5rem] border transition-all duration-500 ${
-            hasUserSolved(challengerId) ? 'border-accent3 bg-accent3/5 shadow-lg'
-            : duel.status === 'WAITING' ? 'border-dashed opacity-30 bg-transparent'
-            : 'bg-surface border-accent2/20'
-          }`}>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-5">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${hasUserSolved(challengerId) ? 'bg-accent3 text-black' : 'bg-surface2 text-muted'}`}>
-                  {(challengerEmail || '?')[0].toUpperCase()}
+          {/* SIDE FEED */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            <div className="text-xs font-semibold text-gray-400 px-1">
+              Match Status
+            </div>
+
+            {/* HOST CARD */}
+            <div className={`p-5 rounded-2xl border transition-all duration-300 shadow-xl ${
+              hasUserSolved(hostId) 
+                ? 'border-accent3/40 bg-accent3/5' 
+                : 'bg-[#14141a] border-[#2a2a38]'
+            }`}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                    hasUserSolved(hostId) ? 'bg-accent3 text-black' : 'bg-accent/10 border border-accent/20 text-accent'
+                  }`}>
+                    {(hostEmail || 'H')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm text-white">
+                      {(hostEmail || 'Host').split('@')[0]} {amIHost && '(You)'}
+                    </div>
+                    <div className="text-xs text-gray-400">Host</div>
+                  </div>
                 </div>
                 <div>
-                  <div className="font-bold text-lg uppercase italic tracking-tighter">
-                    {(challengerEmail || 'Searching...').split('@')[0]} {!amIHost && challengerId && '(YOU)'}
-                  </div>
-                  <div className="text-[10px] font-mono uppercase tracking-widest">
-                    {opponentLeft
-                      ? <span className="text-accent2 font-bold">⚠ LEFT MATCH</span>
-                      : duel.status === 'REQUESTED'
-                      ? <span className="text-muted">PENDING</span>
-                      : <span className="text-muted">Challenger</span>
-                    }
-                  </div>
+                  {hasUserSolved(hostId) ? (
+                    <span className="text-accent3 font-bold text-xs bg-accent3/10 px-2.5 py-1 rounded-lg border border-accent3/20">
+                      Solved ({getSolveTime(hostId)}m)
+                    </span>
+                  ) : duel.abandonedBy?.some(a => (a._id || a)?.toString() === hostId) ? (
+                    <span className="text-accent2 text-xs font-semibold bg-accent2/10 px-2.5 py-1 rounded-lg border border-accent2/20">
+                      Left
+                    </span>
+                  ) : (
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
+                      duel.status === 'ONGOING' 
+                        ? 'bg-accent/10 text-accent border border-accent/20 animate-pulse' 
+                        : 'bg-[#0c0c0f] text-gray-400 border border-[#2a2a38]'
+                    }`}>
+                      {duel.status === 'ONGOING' ? 'Coding...' : 'Ready'}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="text-right">
-                {hasUserSolved(challengerId)
-                  ? <span className="text-accent3 font-mono font-black text-2xl tracking-tighter">{getSolveTime(challengerId)} MINS</span>
-                  : duel.abandonedBy?.some(a => (a._id || a)?.toString() === challengerId)
-                  ? <span className="text-accent2 font-bold text-[10px] uppercase">⚠ LEFT</span>
-                  : <span className={`text-accent2 font-bold text-[10px] uppercase ${duel.status === 'ONGOING' ? 'animate-pulse' : ''}`}>
-                      {duel.status === 'ONGOING' ? 'SOLVING' : ''}
+            </div>
+
+            {/* CHALLENGER CARD */}
+            <div className={`p-5 rounded-2xl border transition-all duration-300 shadow-xl ${
+              hasUserSolved(challengerId) 
+                ? 'border-accent3/40 bg-accent3/5' 
+                : duel.status === 'WAITING' 
+                ? 'border-dashed border-[#2a2a38] bg-transparent opacity-60' 
+                : 'bg-[#14141a] border-[#2a2a38]'
+            }`}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                    hasUserSolved(challengerId) 
+                      ? 'bg-accent3 text-black' 
+                      : 'bg-[#0c0c0f] border border-[#2a2a38] text-gray-400'
+                  }`}>
+                    {(challengerEmail || '?')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm text-white">
+                      {(challengerEmail || 'Searching...').split('@')[0]} {!amIHost && challengerId && '(You)'}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {opponentLeft ? 'Left' : duel.status === 'REQUESTED' ? 'Pending' : 'Challenger'}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  {hasUserSolved(challengerId) ? (
+                    <span className="text-accent3 font-bold text-xs bg-accent3/10 px-2.5 py-1 rounded-lg border border-accent3/20">
+                      Solved ({getSolveTime(challengerId)}m)
                     </span>
-                }
+                  ) : duel.abandonedBy?.some(a => (a._id || a)?.toString() === challengerId) ? (
+                    <span className="text-accent2 text-xs font-semibold bg-accent2/10 px-2.5 py-1 rounded-lg border border-accent2/20">
+                      Left
+                    </span>
+                  ) : (
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
+                      duel.status === 'ONGOING' 
+                        ? 'bg-accent2/10 text-accent2 border border-accent2/20 animate-pulse' 
+                        : 'bg-[#0c0c0f] text-gray-500 border border-[#2a2a38]'
+                    }`}>
+                      {duel.status === 'ONGOING' ? 'Coding...' : 'Waiting'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-6 p-6 bg-accent4/5 border border-accent4/10 rounded-3xl">
-            <div className="flex items-start gap-4">
-              <AlertCircle className="text-accent4 shrink-0" size={20} />
-              <p className="text-[10px] text-muted uppercase font-mono leading-relaxed">
-                Only solves recorded <span className="text-white font-bold underline">after</span> match start are valid.
-                If you quit, opponent can still earn points. Once solved, you can exit freely.
+            {/* Match info alert */}
+            <div className="p-4 bg-[#14141a] border border-[#2a2a38] rounded-2xl flex items-start gap-3 text-xs text-gray-400 shadow-md">
+              <AlertCircle className="text-accent shrink-0 mt-0.5" size={16} />
+              <p className="leading-relaxed">
+                Verification checks for LeetCode submissions recorded after match start. Once your solution is verified, you are free to exit.
               </p>
             </div>
           </div>

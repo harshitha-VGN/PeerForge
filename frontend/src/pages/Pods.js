@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Send, Users, LogOut, MessageSquare, UserPlus, Clock, AlertTriangle, XCircle, Search, X } from 'lucide-react';
+import { Plus, Send, Users, LogOut, MessageSquare, UserPlus, Clock, AlertTriangle, XCircle, Search, X, Layers } from 'lucide-react';
 import API from '../api';
 import socket from '../socket';
 
@@ -25,15 +25,29 @@ const RejectModal = ({ requester, onConfirm, onCancel }) => {
   const [reason, setReason] = useState("");
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#14141a] border border-[#2a2a38] rounded-3xl p-8 w-full max-w-md shadow-2xl">
-        <h2 className="text-lg font-head font-black uppercase mb-1 text-white">Reject Request</h2>
-        <p className="text-muted text-xs font-mono mb-6">From: <span className="text-accent">{requester?.split('@')[0]}</span></p>
-        <textarea value={reason} onChange={e => setReason(e.target.value)}
-          placeholder="Give a reason (will be shown to the applicant)..."
-          rows={3} className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent2 resize-none mb-4 text-sm" />
+      <div className="bg-[#14141a] border border-[#2a2a38] rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+        <h2 className="text-lg font-bold text-white mb-1">Decline Join Request</h2>
+        <p className="text-gray-400 text-xs mb-4">Applicant: <span className="text-accent font-semibold">{requester?.split('@')[0]}</span></p>
+        <textarea 
+          value={reason} 
+          onChange={e => setReason(e.target.value)}
+          placeholder="Provide a constructive reason for the applicant..."
+          rows={3} 
+          className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent resize-none mb-4 text-sm" 
+        />
         <div className="flex gap-3">
-          <button onClick={() => onConfirm(reason)} className="flex-1 py-3 bg-accent2 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:opacity-90 transition">Reject</button>
-          <button onClick={onCancel} className="flex-1 py-3 border border-[#2a2a38] text-muted rounded-xl font-black uppercase text-xs hover:text-white transition">Cancel</button>
+          <button 
+            onClick={() => onConfirm(reason)} 
+            className="flex-1 py-2.5 bg-accent2 text-white rounded-xl font-semibold text-xs hover:bg-accent2/90 transition shadow-lg shadow-accent2/20"
+          >
+            Decline Request
+          </button>
+          <button 
+            onClick={onCancel} 
+            className="flex-1 py-2.5 border border-[#2a2a38] text-gray-400 rounded-xl font-semibold text-xs hover:text-white hover:border-gray-600 transition"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -46,22 +60,46 @@ const ClosePodModal = ({ pod, onClose, onClosed }) => {
   const [loading, setLoading] = useState(false);
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#14141a] border border-[#2a2a38] rounded-3xl p-8 w-full max-w-md shadow-2xl">
-        <h2 className="text-lg font-head font-black uppercase mb-1 text-white">🏆 Close Pod</h2>
-        <p className="text-muted text-xs font-mono mb-6">This pod will be added to the <span className="text-accent">Pods Hall of Fame</span> and removed from the lobby.</p>
-        <input value={link} onChange={e => setLink(e.target.value)}
-          placeholder="Project link (GitHub / Live URL) — optional"
-          className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent mb-4 text-sm" />
+      <div className="bg-[#14141a] border border-[#2a2a38] rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+        <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 mb-3">
+          🏆
+        </div>
+        <h2 className="text-lg font-bold text-white mb-1">Complete & Close Pod</h2>
+        <p className="text-gray-400 text-xs mb-5">
+          Mark this project as finished to immortalize it in the <span className="text-accent font-semibold">Pods Hall of Fame</span>.
+        </p>
+        <div>
+          <label className="text-xs font-semibold text-gray-400 mb-1.5 block">Project Link (Optional)</label>
+          <input 
+            value={link} 
+            onChange={e => setLink(e.target.value)}
+            placeholder="https://github.com/org/repo or Live Demo URL"
+            className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-2.5 text-white outline-none focus:border-accent mb-5 text-sm transition" 
+          />
+        </div>
         <div className="flex gap-3">
-          <button disabled={loading} onClick={async () => {
-            setLoading(true);
-            try { await API.post(`/pods/${pod._id}/close`, { projectLink: link }); onClosed(); onClose(); }
-            catch (e) { alert(e.response?.data?.message || "Failed to close pod."); }
-            finally { setLoading(false); }
-          }} className="flex-1 py-3 bg-accent text-white rounded-xl font-black uppercase text-xs tracking-widest hover:opacity-90 transition disabled:opacity-60">
-            {loading ? "Closing..." : "Close & Add to Hall of Fame"}
+          <button 
+            disabled={loading} 
+            onClick={async () => {
+              setLoading(true);
+              try { 
+                await API.post(`/pods/${pod._id}/close`, { projectLink: link }); 
+                onClosed(); 
+                onClose(); 
+              }
+              catch (e) { alert(e.response?.data?.message || "Failed to close pod."); }
+              finally { setLoading(false); }
+            }} 
+            className="flex-1 py-2.5 bg-accent text-white rounded-xl font-semibold text-xs hover:bg-accent/90 transition shadow-lg shadow-accent/20 disabled:opacity-50"
+          >
+            {loading ? "Closing Pod..." : "Finish & Enshrine"}
           </button>
-          <button onClick={onClose} className="px-5 py-3 border border-[#2a2a38] text-muted rounded-xl font-black uppercase text-xs hover:text-white transition">Cancel</button>
+          <button 
+            onClick={onClose} 
+            className="px-5 py-2.5 border border-[#2a2a38] text-gray-400 rounded-xl font-semibold text-xs hover:text-white transition"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -84,50 +122,101 @@ const CreatePodModal = ({ onClose, onCreate }) => {
   };
 
   const handleSubmit = async () => {
-    if (!form.title.trim() || !form.idea.trim()) return alert("Title and idea are required.");
+    if (!form.title.trim() || !form.idea.trim()) return alert("Title and project idea are required.");
     setLoading(true);
-    try { const { data } = await API.post("/pods", form); onCreate(data); onClose(); }
-    catch (e) { alert(e.response?.data?.message || "Failed to create pod."); }
+    try { 
+      const { data } = await API.post("/pods", form); 
+      onCreate(data); 
+      onClose(); 
+    }
+    catch (e) { alert(e.response?.data?.message || "Failed to launch pod."); }
     finally { setLoading(false); }
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#14141a] border border-[#2a2a38] rounded-3xl p-8 w-full max-w-lg shadow-2xl my-4">
-        <h2 className="text-xl font-head font-black uppercase mb-6 text-white italic">Launch New Pod</h2>
-        <div className="space-y-5">
-          <input value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))}
-            placeholder="Project Title *" className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent" />
-          <textarea value={form.idea} onChange={e => setForm(f => ({...f, idea: e.target.value}))}
-            placeholder="What are you building? *" rows={3}
-            className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent resize-none" />
+      <div className="bg-[#14141a] border border-[#2a2a38] rounded-2xl p-6 sm:p-8 w-full max-w-lg shadow-2xl my-6">
+        <div className="flex items-center justify-between pb-4 border-b border-[#2a2a38] mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+              <Layers size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight">Launch Study Pod</h2>
+              <p className="text-xs text-gray-400">Assemble a team to build and study together</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white p-1 rounded-lg hover:bg-white/5 transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-400 mb-1.5 block">Project Title *</label>
+            <input 
+              value={form.title} 
+              onChange={e => setForm(f => ({...f, title: e.target.value}))}
+              placeholder="e.g. Distributed Task Queue in Go" 
+              className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-2.5 text-white outline-none focus:border-accent text-sm transition" 
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-400 mb-1.5 block">What are you building? *</label>
+            <textarea 
+              value={form.idea} 
+              onChange={e => setForm(f => ({...f, idea: e.target.value}))}
+              placeholder="Describe the project goal, scope, and what skills members will gain..." 
+              rows={3}
+              className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-2.5 text-white outline-none focus:border-accent resize-none text-sm transition" 
+            />
+          </div>
 
           {/* Tech Stack */}
           <div>
-            <p className="text-muted text-[10px] font-mono uppercase mb-2 font-bold">Tech Stack</p>
-            <div className="flex flex-wrap gap-2 mb-2">
+            <label className="text-xs font-semibold text-gray-400 mb-2 block">Tech Stack</label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {TECH_OPTIONS.map(t => (
-                <button key={t} type="button" onClick={() => toggleTech(t)}
-                  className={`px-3 py-1 rounded-full text-[10px] font-bold border transition ${form.techStack.includes(t) ? techColor(t) : 'border-[#2a2a38] text-muted hover:border-accent/30 hover:text-white'}`}>
+                <button 
+                  key={t} 
+                  type="button" 
+                  onClick={() => toggleTech(t)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium border transition ${
+                    form.techStack.includes(t) 
+                      ? techColor(t) 
+                      : 'border-[#2a2a38] bg-[#0c0c0f] text-gray-400 hover:text-white'
+                  }`}
+                >
                   {t}
                 </button>
               ))}
             </div>
+
             {/* Custom tech input */}
             <div className="flex gap-2 mt-2">
-              <input value={techInput} onChange={e => setTechInput(e.target.value)}
+              <input 
+                value={techInput} 
+                onChange={e => setTechInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomTech())}
-                placeholder="Add custom tech... (press Enter)" 
-                className="flex-1 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-accent" />
-              <button type="button" onClick={addCustomTech} className="px-3 py-2 bg-accent/20 text-accent rounded-xl text-xs font-bold border border-accent/30 hover:bg-accent hover:text-white transition">Add</button>
+                placeholder="Add other tech..." 
+                className="flex-1 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-accent transition" 
+              />
+              <button 
+                type="button" 
+                onClick={addCustomTech} 
+                className="px-4 py-2 bg-accent/15 text-accent rounded-xl text-xs font-semibold border border-accent/30 hover:bg-accent hover:text-white transition"
+              >
+                Add
+              </button>
             </div>
-            {/* Selected custom techs */}
+            
             {form.techStack.filter(t => !TECH_OPTIONS.includes(t)).length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-1.5 mt-2">
                 {form.techStack.filter(t => !TECH_OPTIONS.includes(t)).map(t => (
-                  <span key={t} className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold border border-accent/30 bg-accent/10 text-accent">
+                  <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-accent/30 bg-accent/10 text-accent">
                     {t}
-                    <button type="button" onClick={() => toggleTech(t)}><X size={10}/></button>
+                    <button type="button" onClick={() => toggleTech(t)}><X size={12}/></button>
                   </span>
                 ))}
               </div>
@@ -136,11 +225,19 @@ const CreatePodModal = ({ onClose, onCreate }) => {
 
           {/* Tags */}
           <div>
-            <p className="text-muted text-[10px] font-mono uppercase mb-2 font-bold">Project Tags</p>
-            <div className="flex flex-wrap gap-2">
+            <label className="text-xs font-semibold text-gray-400 mb-2 block">Project Category Tags</label>
+            <div className="flex flex-wrap gap-1.5">
               {TAG_OPTIONS.map(t => (
-                <button key={t} type="button" onClick={() => toggleTag(t)}
-                  className={`px-3 py-1 rounded-full text-[10px] font-bold border transition ${form.tags.includes(t) ? 'border-accent4/40 bg-accent4/10 text-accent4' : 'border-[#2a2a38] text-muted hover:border-accent/30 hover:text-white'}`}>
+                <button 
+                  key={t} 
+                  type="button" 
+                  onClick={() => toggleTag(t)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium border transition ${
+                    form.tags.includes(t) 
+                      ? 'border-accent4/40 bg-accent4/10 text-accent4 font-semibold' 
+                      : 'border-[#2a2a38] bg-[#0c0c0f] text-gray-400 hover:text-white'
+                  }`}
+                >
                   {t}
                 </button>
               ))}
@@ -149,18 +246,27 @@ const CreatePodModal = ({ onClose, onCreate }) => {
 
           {/* Max members */}
           <div>
-            <p className="text-muted text-[10px] font-mono uppercase mb-2 font-bold">Max Members</p>
-            <input type="number" min={2} max={20} value={form.maxMembers}
-              onChange={e => setForm(f => ({...f, maxMembers: Math.max(2, Math.min(20, Number(e.target.value)))}))}
-              className="w-28 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-2 text-white outline-none focus:border-accent text-sm" />
-            <span className="text-muted text-xs ml-2">members (2–20)</span>
+            <label className="text-xs font-semibold text-gray-400 mb-1.5 block">Team Size Limit</label>
+            <div className="flex items-center gap-3">
+              <input 
+                type="number" 
+                min={2} 
+                max={20} 
+                value={form.maxMembers}
+                onChange={e => setForm(f => ({...f, maxMembers: Math.max(2, Math.min(20, Number(e.target.value)))}))}
+                className="w-24 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-3 py-2 text-white outline-none focus:border-accent text-sm" 
+              />
+              <span className="text-gray-400 text-xs">Maximum developers (2–20 members)</span>
+            </div>
           </div>
 
-          <button onClick={handleSubmit} disabled={loading}
-            className="w-full py-4 bg-accent text-white rounded-xl font-black uppercase tracking-widest transition disabled:opacity-60">
-            {loading ? "Launching..." : "CREATE POD"}
+          <button 
+            onClick={handleSubmit} 
+            disabled={loading}
+            className="w-full mt-4 py-3 bg-accent text-white rounded-xl font-semibold text-xs hover:bg-accent/90 transition shadow-lg shadow-accent/20 disabled:opacity-50"
+          >
+            {loading ? "Launching Pod..." : "Create & Open Pod"}
           </button>
-          <button onClick={onClose} className="w-full text-muted text-xs font-bold uppercase">Cancel</button>
         </div>
       </div>
     </div>
@@ -173,23 +279,44 @@ const JoinModal = ({ pod, onClose, onRequested }) => {
   const [loading, setLoading] = useState(false);
   const handleSubmit = async () => {
     setLoading(true);
-    try { await API.post(`/pods/${pod._id}/request`, { message: msg }); onRequested(); onClose(); }
+    try { 
+      await API.post(`/pods/${pod._id}/request`, { message: msg }); 
+      onRequested(); 
+      onClose(); 
+    }
     catch (e) { alert(e.response?.data?.message || "Request failed."); }
     finally { setLoading(false); }
   };
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#14141a] border border-[#2a2a38] rounded-3xl p-8 w-full max-w-md shadow-2xl">
-        <h2 className="text-xl font-head font-black uppercase mb-2 text-white">Join Request</h2>
-        <p className="text-accent text-xs font-mono mb-1 uppercase tracking-widest">{pod.title}</p>
-        <p className="text-muted text-xs mb-6">The creator will see your profile before deciding.</p>
-        <textarea value={msg} onChange={e => setMsg(e.target.value)} placeholder="Introduce yourself briefly..." rows={3}
-          className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-3 text-white outline-none focus:border-accent resize-none mb-4" />
-        <button onClick={handleSubmit} disabled={loading}
-          className="w-full py-4 bg-accent text-white rounded-xl font-black uppercase transition disabled:opacity-60">
-          {loading ? "Sending..." : "SEND REQUEST"}
-        </button>
-        <button onClick={onClose} className="w-full text-muted text-xs font-bold mt-4 uppercase">CANCEL</button>
+      <div className="bg-[#14141a] border border-[#2a2a38] rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+        <h2 className="text-lg font-bold text-white mb-1">Request to Join Pod</h2>
+        <p className="text-accent text-xs font-semibold mb-4">{pod.title}</p>
+        <p className="text-gray-400 text-xs mb-4">
+          The pod host will review your request and profile.
+        </p>
+        <textarea 
+          value={msg} 
+          onChange={e => setMsg(e.target.value)} 
+          placeholder="Introduce yourself and share what you'd like to contribute..." 
+          rows={3}
+          className="w-full bg-[#0c0c0f] border border-[#2a2a38] rounded-xl px-4 py-2.5 text-white outline-none focus:border-accent resize-none mb-4 text-sm transition" 
+        />
+        <div className="flex gap-3">
+          <button 
+            onClick={handleSubmit} 
+            disabled={loading}
+            className="flex-1 py-2.5 bg-accent text-white rounded-xl font-semibold text-xs hover:bg-accent/90 transition shadow-lg shadow-accent/20 disabled:opacity-50"
+          >
+            {loading ? "Sending..." : "Submit Request"}
+          </button>
+          <button 
+            onClick={onClose} 
+            className="px-5 py-2.5 border border-[#2a2a38] text-gray-400 rounded-xl font-semibold text-xs hover:text-white transition"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -205,79 +332,96 @@ const PodCard = ({ pod, myId, onJoin, onEnter, onDismissRejection }) => {
   const pendingCount = isCreator ? pod.pendingRequests?.length || 0 : 0;
 
   return (
-    <div className={`bg-[#14141a] border rounded-[2rem] p-6 flex flex-col gap-4 transition-all group relative
-      ${isMember || isCreator ? "border-accent/40 bg-accent/5 ring-1 ring-accent/10" : "border-[#2a2a38] hover:border-accent/30"}
-      ${rejection ? "border-accent2/30 bg-accent2/5" : ""}`}>
+    <div className={`bg-[#14141a] border rounded-2xl p-6 flex flex-col justify-between shadow-xl transition-all duration-200 group relative
+      ${isMember || isCreator ? "border-accent/40 hover:border-accent" : "border-[#2a2a38] hover:border-[#3a3a4c]"}
+      ${rejection ? "border-accent2/30" : ""}`}>
 
       {/* Pending requests badge */}
       {pendingCount > 0 && (
-        <div className="absolute -top-2 -right-2 w-6 h-6 bg-accent2 rounded-full flex items-center justify-center z-10">
-          <span className="text-white text-[10px] font-black">{pendingCount}</span>
+        <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-accent2 text-white rounded-full text-[10px] font-bold shadow-md">
+          {pendingCount} new {pendingCount === 1 ? 'request' : 'requests'}
         </div>
       )}
-
-      {/* Rejection banner */}
-      {rejection && (
-        <div className="bg-accent2/10 border border-accent2/30 rounded-2xl p-4 flex items-start gap-3">
-          <AlertTriangle size={14} className="text-accent2 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-accent2 font-black text-[10px] uppercase">Request Rejected</p>
-            <p className="text-muted text-[10px] font-mono mt-0.5 leading-relaxed">"{rejection.reason || "Not a fit right now."}"</p>
-          </div>
-          <button onClick={() => onDismissRejection(pod._id)} className="text-muted hover:text-white transition shrink-0"><XCircle size={12}/></button>
-        </div>
-      )}
-
-      <div className="flex justify-between items-start">
-        <span className={`text-[10px] font-mono px-3 py-1 rounded-full border font-bold tracking-widest uppercase
-          ${pod.status === 'FULL' ? 'border-accent2/20 bg-accent2/5 text-accent2' : 'border-accent3/20 bg-accent3/5 text-accent3'}`}>
-          ● {pod.status}
-        </span>
-        <div className="flex items-center gap-1 text-muted text-[10px] font-mono">
-          <Users size={12}/> {pod.members?.length || 1}/{pod.maxMembers}
-        </div>
-      </div>
 
       <div>
-        <h3 className="text-lg font-head font-black uppercase tracking-tight text-white mb-0.5 group-hover:text-accent transition-colors">{pod.title}</h3>
-        <p className="text-muted text-[10px] font-mono uppercase tracking-widest italic">By {hostName} {isCreator && "(YOU)"}</p>
+        {/* Rejection banner */}
+        {rejection && (
+          <div className="mb-4 bg-accent2/10 border border-accent2/20 rounded-xl p-3 flex items-start gap-2.5">
+            <AlertTriangle size={15} className="text-accent2 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-accent2 font-semibold text-xs">Request Declined</p>
+              <p className="text-gray-400 text-xs mt-0.5 leading-relaxed">"{rejection.reason || "Not a match currently."}"</p>
+            </div>
+            <button onClick={() => onDismissRejection(pod._id)} className="text-gray-500 hover:text-white transition shrink-0 p-0.5">
+              <XCircle size={14}/>
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mb-3">
+          <span className={`text-xs px-2.5 py-0.5 rounded-lg border font-semibold ${
+            pod.status === 'FULL' 
+              ? 'border-accent2/20 bg-accent2/10 text-accent2' 
+              : 'border-accent3/20 bg-accent3/10 text-accent3'
+          }`}>
+            ● {pod.status}
+          </span>
+          <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium">
+            <Users size={14}/> <span>{pod.members?.length || 1}/{pod.maxMembers}</span>
+          </div>
+        </div>
+
+        <h3 className="text-base font-bold text-white mb-1 group-hover:text-accent transition">
+          {pod.title}
+        </h3>
+        <p className="text-xs text-gray-400 mb-3">
+          Host: <span className="text-gray-300 font-medium">{hostName}</span> {isCreator && "(You)"}
+        </p>
+
+        {/* Tech stack */}
+        {pod.techStack?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {pod.techStack.slice(0, 4).map(t => (
+              <span key={t} className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${techColor(t)}`}>{t}</span>
+            ))}
+            {pod.techStack.length > 4 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-md border border-[#2a2a38] bg-[#0c0c0f] text-gray-400 font-medium">
+                +{pod.techStack.length - 4}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Tags */}
+        {pod.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {pod.tags.map(t => (
+              <span key={t} className="text-[11px] px-2 py-0.5 rounded-md border border-accent4/20 bg-accent4/10 text-accent4 font-medium">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs text-gray-300 leading-relaxed line-clamp-2 italic mb-5">
+          "{pod.idea}"
+        </p>
       </div>
-
-      {/* Tech stack */}
-      {pod.techStack?.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {pod.techStack.slice(0, 4).map(t => (
-            <span key={t} className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${techColor(t)}`}>{t}</span>
-          ))}
-          {pod.techStack.length > 4 && <span className="text-[9px] px-2 py-0.5 rounded-full border border-[#2a2a38] text-muted font-bold">+{pod.techStack.length - 4}</span>}
-        </div>
-      )}
-
-      {/* Tags */}
-      {pod.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {pod.tags.map(t => (
-            <span key={t} className="text-[9px] px-2 py-0.5 rounded-full border border-accent4/20 bg-accent4/5 text-accent4 font-bold">{t}</span>
-          ))}
-        </div>
-      )}
-
-      <p className="text-sm text-gray-400 leading-relaxed line-clamp-2 italic">"{pod.idea}"</p>
 
       <button
         onClick={() => (isMember || isCreator) ? onEnter(pod._id) : (!isPending && !rejection && pod.status === 'OPEN') ? onJoin(pod) : null}
         disabled={isPending || !!rejection || (pod.status === 'FULL' && !isMember && !isCreator)}
-        className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 mt-auto
-          ${(isMember || isCreator) ? "bg-accent text-white shadow-lg shadow-accent/20"
-          : isPending ? "bg-[#1c1c26] text-muted cursor-wait border border-[#2a2a38]"
-          : rejection ? "bg-accent2/10 text-accent2 border border-accent2/30 cursor-not-allowed"
-          : pod.status === 'FULL' ? "bg-[#1c1c26] text-muted border border-[#2a2a38] cursor-not-allowed"
-          : "border-2 border-accent text-accent hover:bg-accent hover:text-white"}`}>
-        {(isMember || isCreator) ? <><MessageSquare size={14}/> OPEN CHAT</>
-          : isPending ? <><Clock size={14}/> REQUEST PENDING</>
-          : rejection ? <><XCircle size={14}/> REQUEST REJECTED</>
-          : pod.status === 'FULL' ? <><Users size={14}/> POD FULL</>
-          : <><UserPlus size={14}/> REQUEST TO JOIN</>}
+        className={`w-full py-2.5 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2
+          ${(isMember || isCreator) ? "bg-accent text-white shadow-lg shadow-accent/20 hover:bg-accent/90"
+          : isPending ? "bg-[#0c0c0f] text-gray-400 border border-[#2a2a38] cursor-wait"
+          : rejection ? "bg-accent2/10 text-accent2 border border-accent2/20 cursor-not-allowed"
+          : pod.status === 'FULL' ? "bg-[#0c0c0f] text-gray-500 border border-[#2a2a38] cursor-not-allowed"
+          : "bg-accent/15 border border-accent/30 text-accent hover:bg-accent hover:text-white"}`}>
+        {(isMember || isCreator) ? <><MessageSquare size={14}/> Enter Pod Room</>
+          : isPending ? <><Clock size={14}/> Request Pending</>
+          : rejection ? <><XCircle size={14}/> Request Declined</>
+          : pod.status === 'FULL' ? <><Users size={14}/> Pod Full</>
+          : <><UserPlus size={14}/> Request to Join</>}
       </button>
     </div>
   );
@@ -303,12 +447,10 @@ const PodRoom = ({ podId, myId, onBack }) => {
   useEffect(() => {
     fetchStatus();
 
-    // Join Pod Socket Room
     socket.emit("join_pod", podId);
 
     const handleReceiveMessage = (newMsg) => {
       setMessages((prev) => {
-        // Prevent duplicate message addition
         if (prev.some((m) => m._id && newMsg._id && m._id === newMsg._id)) return prev;
         return [...prev, newMsg];
       });
@@ -323,7 +465,7 @@ const PodRoom = ({ podId, myId, onBack }) => {
     };
 
     const handlePodClosed = () => {
-      alert("This pod has been closed.");
+      alert("This pod has been completed and closed.");
       onBack();
     };
 
@@ -361,7 +503,6 @@ const PodRoom = ({ podId, myId, onBack }) => {
     }
   };
 
-
   const handleAccept = async (userObj) => {
     try { await API.post(`/pods/${podId}/accept`, { requestUserId: toStr(userObj) }); fetchStatus(); }
     catch { alert("Accept failed"); }
@@ -381,7 +522,7 @@ const PodRoom = ({ podId, myId, onBack }) => {
     catch (e) { alert(e.response?.data?.message || "Failed."); }
   };
 
-  if (!pod) return <div className="p-20 text-center font-mono animate-pulse uppercase text-xs tracking-widest text-accent">Syncing Pod Data...</div>;
+  if (!pod) return <div className="p-20 text-center font-semibold text-sm text-accent animate-pulse">Connecting to Pod Room...</div>;
   const isCreator = toStr(pod.creator) === toStr(myId);
   const pendingCount = pod.pendingRequests?.length || 0;
 
@@ -393,55 +534,92 @@ const PodRoom = ({ podId, myId, onBack }) => {
       <div className="flex flex-col h-[calc(100vh-140px)]">
         <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#2a2a38]">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-muted hover:text-white transition uppercase font-mono text-[10px]">← Back</button>
+            <button 
+              onClick={onBack} 
+              className="text-gray-400 hover:text-white transition text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-white/5 border border-[#2a2a38]"
+            >
+              ← Back to Pods
+            </button>
             <div className="h-6 w-px bg-[#2a2a38]"/>
             <div>
-              <h2 className="text-xl font-head font-black uppercase italic tracking-tighter text-white">{pod.title}</h2>
-              <p className="text-accent3 text-[10px] font-mono font-bold uppercase tracking-widest">● {pod.members?.length} Members Active (Live Socket)</p>
+              <h2 className="text-xl font-bold text-white tracking-tight">{pod.title}</h2>
+              <p className="text-accent3 text-xs font-medium">● {pod.members?.length} Members Active · Real-time Chat</p>
             </div>
           </div>
-          <button onClick={handleLeave}
-            className="group flex items-center gap-2 px-5 py-2 rounded-xl border border-accent2/30 text-accent2 text-[10px] font-black uppercase hover:bg-accent2 hover:text-white transition-all">
-            <LogOut size={12} className="group-hover:-translate-x-1 transition-transform" />
-            {isCreator ? "Close Pod" : "Leave"}
+          <button 
+            onClick={handleLeave}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-accent2/30 text-accent2 text-xs font-semibold hover:bg-accent2 hover:text-white transition"
+          >
+            <LogOut size={14} />
+            <span>{isCreator ? "Close & Complete" : "Leave Pod"}</span>
           </button>
         </div>
 
         <div className="flex gap-2 mb-6">
           {["chat", "members", ...(isCreator ? ["requests"] : [])].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`relative px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition
-                ${tab === t ? "bg-accent text-white" : "text-muted hover:text-white"}`}>
-              {t}
+            <button 
+              key={t} 
+              onClick={() => setTab(t)}
+              className={`relative px-5 py-2 rounded-xl text-xs font-semibold transition capitalize ${
+                tab === t 
+                  ? "bg-accent text-white shadow-md shadow-accent/20" 
+                  : "bg-[#14141a] text-gray-400 border border-[#2a2a38] hover:text-white"
+              }`}
+            >
+              {t === 'chat' ? 'Pod Chat' : t === 'members' ? 'Team Members' : 'Join Requests'}
               {t === 'requests' && pendingCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-accent2 rounded-full text-[8px] font-black text-white flex items-center justify-center">{pendingCount}</span>
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-accent2 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+                  {pendingCount}
+                </span>
               )}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 bg-[#14141a] border border-[#2a2a38] rounded-3xl overflow-hidden flex flex-col p-6 shadow-2xl">
+        <div className="flex-1 bg-[#14141a] border border-[#2a2a38] rounded-2xl overflow-hidden flex flex-col p-6 shadow-xl">
           {tab === "chat" && (
             <>
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2 mb-4">
-                {messages.length === 0 && <div className="text-center text-muted font-mono text-xs uppercase tracking-widest py-10">No messages yet — say hi! 👋</div>}
+              <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 mb-4">
+                {messages.length === 0 && (
+                  <div className="text-center text-gray-400 text-xs py-12">
+                    No messages yet — start the conversation! 👋
+                  </div>
+                )}
                 {messages.map((m, i) => {
                   const isMe = toStr(m.sender) === toStr(myId);
                   return (
                     <div key={m._id || i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[75%] p-4 rounded-2xl text-sm ${isMe ? "bg-accent text-white rounded-br-none" : "bg-[#1c1c26] border border-[#2a2a38] text-gray-300 rounded-bl-none"}`}>
-                        {!isMe && <div className="text-[9px] font-black uppercase text-accent mb-1">{(m.senderEmail || "").split('@')[0]}</div>}
-                        {m.content}
+                      <div className={`max-w-[75%] p-3.5 rounded-2xl text-sm shadow-md ${
+                        isMe 
+                          ? "bg-accent text-white rounded-br-none" 
+                          : "bg-[#0c0c0f] border border-[#2a2a38] text-gray-200 rounded-bl-none"
+                      }`}>
+                        {!isMe && (
+                          <div className="text-xs font-semibold text-accent mb-1">
+                            {(m.senderEmail || "").split('@')[0]}
+                          </div>
+                        )}
+                        <p className="leading-relaxed">{m.content}</p>
                       </div>
                     </div>
                   );
                 })}
                 <div ref={messagesEndRef} />
               </div>
-              <div className="flex gap-2 bg-[#0c0c0f] p-2 rounded-2xl border border-[#2a2a38]">
-                <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()}
-                  placeholder="Message pod members..." className="flex-1 bg-transparent px-4 py-2 text-white outline-none text-sm" />
-                <button onClick={handleSend} className="bg-accent p-3 rounded-xl hover:scale-105 transition"><Send size={18}/></button>
+              <div className="flex gap-2 bg-[#0c0c0f] p-2 rounded-xl border border-[#2a2a38]">
+                <input 
+                  value={input} 
+                  onChange={e => setInput(e.target.value)} 
+                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                  placeholder="Message pod members..." 
+                  className="flex-1 bg-transparent px-4 py-2 text-white outline-none text-sm placeholder-gray-500 font-normal" 
+                />
+                <button 
+                  onClick={handleSend} 
+                  className="bg-accent text-white p-2.5 rounded-lg hover:bg-accent/90 transition shadow-md shadow-accent/20"
+                >
+                  <Send size={16}/>
+                </button>
               </div>
             </>
           )}
@@ -449,11 +627,15 @@ const PodRoom = ({ podId, myId, onBack }) => {
           {tab === "members" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {pod.members?.map(m => (
-                <div key={toStr(m)} className="p-4 bg-[#0c0c0f] border border-[#2a2a38] rounded-2xl flex items-center gap-4">
-                  <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center font-black text-accent">{(m.email || "?")[0].toUpperCase()}</div>
+                <div key={toStr(m)} className="p-4 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl flex items-center gap-3.5">
+                  <div className="w-10 h-10 bg-accent/10 border border-accent/20 rounded-xl flex items-center justify-center font-bold text-accent">
+                    {(m.email || "?")[0].toUpperCase()}
+                  </div>
                   <div>
-                    <div className="font-bold text-white text-sm">{m.email?.split('@')[0] || "User"}</div>
-                    <div className="text-[9px] text-muted font-mono uppercase">{toStr(m) === toStr(pod.creator) ? "Creator" : "Developer"}</div>
+                    <div className="font-semibold text-white text-sm">{m.email?.split('@')[0] || "User"}</div>
+                    <div className="text-xs text-gray-400">
+                      {toStr(m) === toStr(pod.creator) ? "Pod Host / Creator" : "Collaborator"}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -461,17 +643,31 @@ const PodRoom = ({ podId, myId, onBack }) => {
           )}
 
           {tab === "requests" && isCreator && (
-            <div className="space-y-4 overflow-y-auto">
-              {pendingCount === 0 && <div className="text-center text-muted font-mono text-xs uppercase tracking-widest py-10">No pending requests</div>}
+            <div className="space-y-3 overflow-y-auto">
+              {pendingCount === 0 && (
+                <div className="text-center text-gray-400 text-xs py-12">
+                  No pending join requests
+                </div>
+              )}
               {pod.pendingRequests?.map(r => (
-                <div key={toStr(r.user)} className="p-6 bg-[#0c0c0f] border border-[#2a2a38] rounded-3xl flex justify-between items-center gap-4">
+                <div key={toStr(r.user)} className="p-5 bg-[#0c0c0f] border border-[#2a2a38] rounded-xl flex justify-between items-center gap-4">
                   <div className="min-w-0">
-                    <div className="font-black text-white">{r.email?.split('@')[0]}</div>
-                    <p className="text-muted text-xs italic mt-1">"{r.message || 'No intro message'}"</p>
+                    <div className="font-semibold text-white text-sm">{r.email?.split('@')[0]}</div>
+                    <p className="text-gray-400 text-xs italic mt-1">"{r.message || 'No introduction provided'}"</p>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={() => handleAccept(r.user)} className="bg-accent3 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:opacity-90 transition">Accept</button>
-                    <button onClick={() => setRejectTarget({ user: r.user, email: r.email })} className="bg-accent2 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:opacity-90 transition">Reject</button>
+                    <button 
+                      onClick={() => handleAccept(r.user)} 
+                      className="bg-accent3 text-black px-4 py-2 rounded-lg text-xs font-semibold hover:bg-accent3/90 transition"
+                    >
+                      Accept
+                    </button>
+                    <button 
+                      onClick={() => setRejectTarget({ user: r.user, email: r.email })} 
+                      className="border border-accent2/40 text-accent2 px-4 py-2 rounded-lg text-xs font-semibold hover:bg-accent2/10 transition"
+                    >
+                      Decline
+                    </button>
                   </div>
                 </div>
               ))}
@@ -536,7 +732,6 @@ const Pods = () => {
   const clearFilters = () => { setSelectedTechs([]); setSelectedTags([]); setSearchTech(""); };
   const hasFilters = selectedTechs.length > 0 || selectedTags.length > 0 || searchTech.trim();
 
-  // Filter pods
   const filterPod = (pod) => {
     const q = searchTech.trim().toLowerCase();
     if (q && !pod.title?.toLowerCase().includes(q) && !pod.techStack?.some(t => t.toLowerCase().includes(q)) && !pod.tags?.some(t => t.toLowerCase().includes(q)) && !pod.idea?.toLowerCase().includes(q)) return false;
@@ -546,7 +741,7 @@ const Pods = () => {
   };
 
   if (activePodId) return (
-    <div className="p-10 max-w-4xl mx-auto">
+    <div className="p-6 sm:p-10 max-w-5xl mx-auto">
       <PodRoom podId={activePodId} myId={myId} onBack={() => { setActivePodId(null); fetchPods(); }} />
     </div>
   );
@@ -557,104 +752,158 @@ const Pods = () => {
   const allTagsInPods = [...new Set(pods.flatMap(p => p.tags || []))].sort();
 
   return (
-    <div className="p-10 max-w-7xl mx-auto font-body text-white">
-      {/* Header */}
-      <header className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-4xl font-head font-black italic uppercase tracking-tighter">Study Pods</h1>
-          <p className="text-muted text-sm mt-1 uppercase font-mono tracking-widest">Collaborative Coding Units (Real-Time Push)</p>
-        </div>
-        <button onClick={() => setShowCreate(true)}
-          className="bg-accent px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 transition shadow-xl shadow-accent/20 flex items-center gap-2">
-          <Plus size={18}/> Launch Pod
-        </button>
-      </header>
-
-      {/* Search & Filter bar */}
-      <div className="mb-8 space-y-3">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
-            <input value={searchTech} onChange={e => setSearchTech(e.target.value)}
-              placeholder="Search by title, tech, tag, or idea..."
-              className="w-full bg-[#14141a] border border-[#2a2a38] rounded-2xl pl-10 pr-4 py-3 text-white text-sm outline-none focus:border-accent" />
-            {searchTech && <button onClick={() => setSearchTech("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-white"><X size={14}/></button>}
+    <div className="min-h-screen bg-[#0c0c0f] text-white py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-xs font-semibold mb-3">
+              <Layers size={14} />
+              <span>Collaborative Pods</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Study & Project Pods</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              Build projects with peers, review code together, and ship to the Hall of Fame.
+            </p>
           </div>
-          <button onClick={() => setShowFilters(f => !f)}
-            className={`px-5 py-3 rounded-2xl border text-xs font-black uppercase tracking-widest transition flex items-center gap-2
-              ${showFilters || hasFilters ? "border-accent bg-accent/10 text-accent" : "border-[#2a2a38] text-muted hover:text-white"}`}>
-            <Search size={14}/> Filters {hasFilters && `(${selectedTechs.length + selectedTags.length})`}
+
+          <button 
+            onClick={() => setShowCreate(true)}
+            className="self-start sm:self-auto bg-accent text-white px-5 py-3 rounded-xl font-semibold text-xs hover:bg-accent/90 transition shadow-lg shadow-accent/20 flex items-center gap-2"
+          >
+            <Plus size={16}/> 
+            <span>Launch New Pod</span>
           </button>
-          {hasFilters && <button onClick={clearFilters} className="px-4 py-3 rounded-2xl border border-accent2/30 text-accent2 text-xs font-black uppercase hover:bg-accent2/10 transition">Clear</button>}
         </div>
 
-        {/* Filter panel */}
-        {showFilters && (
-          <div className="bg-[#14141a] border border-[#2a2a38] rounded-3xl p-6 space-y-4">
-            {allTechsInPods.length > 0 && (
-              <div>
-                <p className="text-muted text-[10px] font-mono uppercase mb-2 font-bold">Filter by Tech</p>
-                <div className="flex flex-wrap gap-2">
-                  {allTechsInPods.map(t => (
-                    <button key={t} onClick={() => toggleTechFilter(t)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold border transition ${selectedTechs.includes(t) ? techColor(t) : 'border-[#2a2a38] text-muted hover:border-accent/30 hover:text-white'}`}>
-                      {t}
-                    </button>
+        {/* Search & Filter bar */}
+        <div className="mb-8 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input 
+                value={searchTech} 
+                onChange={e => setSearchTech(e.target.value)}
+                placeholder="Search by title, tech stack, tag, or keywords..."
+                className="w-full bg-[#14141a] border border-[#2a2a38] rounded-xl pl-11 pr-10 py-3 text-white text-sm outline-none focus:border-accent transition" 
+              />
+              {searchTech && (
+                <button onClick={() => setSearchTech("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1">
+                  <X size={14}/>
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowFilters(f => !f)}
+                className={`px-4 py-3 rounded-xl border text-xs font-semibold transition flex items-center gap-2 ${
+                  showFilters || hasFilters 
+                    ? "border-accent bg-accent/10 text-accent" 
+                    : "border-[#2a2a38] bg-[#14141a] text-gray-400 hover:text-white"
+                }`}
+              >
+                <Search size={14}/> 
+                <span>Filters {hasFilters && `(${selectedTechs.length + selectedTags.length})`}</span>
+              </button>
+              {hasFilters && (
+                <button 
+                  onClick={clearFilters} 
+                  className="px-4 py-3 rounded-xl border border-accent2/30 text-accent2 text-xs font-semibold hover:bg-accent2/10 transition"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter panel */}
+          {showFilters && (
+            <div className="bg-[#14141a] border border-[#2a2a38] rounded-2xl p-6 space-y-4 shadow-xl">
+              {allTechsInPods.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 mb-2 block">Filter by Tech Stack</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTechsInPods.map(t => (
+                      <button 
+                        key={t} 
+                        onClick={() => toggleTechFilter(t)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium border transition ${
+                          selectedTechs.includes(t) 
+                            ? techColor(t) 
+                            : 'border-[#2a2a38] bg-[#0c0c0f] text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {allTagsInPods.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 mb-2 block">Filter by Tag</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTagsInPods.map(t => (
+                      <button 
+                        key={t} 
+                        onClick={() => toggleTagFilter(t)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium border transition ${
+                          selectedTags.includes(t) 
+                            ? 'border-accent4/40 bg-accent4/10 text-accent4 font-semibold' 
+                            : 'border-[#2a2a38] bg-[#0c0c0f] text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="py-24 text-center text-accent font-semibold text-sm animate-pulse">Loading pods...</div>
+        ) : (
+          <div className="space-y-10">
+            {myPods.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 px-1">
+                  My Active Pods ({myPods.length})
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {myPods.map(pod => (
+                    <PodCard key={pod._id} pod={pod} myId={myId} onJoin={setJoinTarget} onEnter={setActivePodId} onDismissRejection={handleDismissRejection} />
                   ))}
                 </div>
-              </div>
+              </section>
             )}
-            {allTagsInPods.length > 0 && (
-              <div>
-                <p className="text-muted text-[10px] font-mono uppercase mb-2 font-bold">Filter by Tag</p>
-                <div className="flex flex-wrap gap-2">
-                  {allTagsInPods.map(t => (
-                    <button key={t} onClick={() => toggleTagFilter(t)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold border transition ${selectedTags.includes(t) ? 'border-accent4/40 bg-accent4/10 text-accent4' : 'border-[#2a2a38] text-muted hover:border-accent/30 hover:text-white'}`}>
-                      {t}
-                    </button>
+
+            {otherPods.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 px-1">
+                  Discover Pods ({otherPods.length})
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {otherPods.map(pod => (
+                    <PodCard key={pod._id} pod={pod} myId={myId} onJoin={setJoinTarget} onEnter={setActivePodId} onDismissRejection={handleDismissRejection} />
                   ))}
                 </div>
+              </section>
+            )}
+
+            {myPods.length === 0 && otherPods.length === 0 && (
+              <div className="py-20 text-center text-gray-400 text-xs bg-[#14141a] border border-[#2a2a38] rounded-2xl p-12">
+                {hasFilters ? "No pods found matching your current filter criteria." : "No active pods right now. Be the first to launch one!"}
               </div>
             )}
           </div>
         )}
+
+        {showCreate && <CreatePodModal onClose={() => setShowCreate(false)} onCreate={() => { setShowCreate(false); fetchPods(); }} />}
+        {joinTarget && <JoinModal pod={joinTarget} onClose={() => setJoinTarget(null)} onRequested={fetchPods} />}
       </div>
-
-      {loading ? (
-        <div className="py-20 text-center animate-pulse font-mono uppercase tracking-[0.5em] text-accent">Searching for active pods...</div>
-      ) : (
-        <>
-          {myPods.length > 0 && (
-            <section className="mb-10">
-              <p className="text-muted text-[10px] font-mono uppercase tracking-widest mb-4 font-bold">My Pods</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
-                {myPods.map(pod => (
-                  <PodCard key={pod._id} pod={pod} myId={myId} onJoin={setJoinTarget} onEnter={setActivePodId} onDismissRejection={handleDismissRejection} />
-                ))}
-              </div>
-            </section>
-          )}
-          {otherPods.length > 0 && (
-            <section>
-              <p className="text-muted text-[10px] font-mono uppercase tracking-widest mb-4 font-bold">Active Pods</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
-                {otherPods.map(pod => (
-                  <PodCard key={pod._id} pod={pod} myId={myId} onJoin={setJoinTarget} onEnter={setActivePodId} onDismissRejection={handleDismissRejection} />
-                ))}
-              </div>
-            </section>
-          )}
-          {myPods.length === 0 && otherPods.length === 0 && (
-            <div className="py-20 text-center font-mono text-muted uppercase tracking-widest text-xs">
-              {hasFilters ? "No pods match your filters." : "No active pods — launch one to get started!"}
-            </div>
-          )}
-        </>
-      )}
-
-      {showCreate && <CreatePodModal onClose={() => setShowCreate(false)} onCreate={() => { setShowCreate(false); fetchPods(); }} />}
-      {joinTarget && <JoinModal pod={joinTarget} onClose={() => setJoinTarget(null)} onRequested={fetchPods} />}
     </div>
   );
 };
