@@ -348,12 +348,19 @@ const PodRoom = ({ podId, myId, onBack }) => {
     const content = input.trim();
     setInput("");
     try {
-      await API.post(`/pods/${podId}/message`, { content });
+      const { data } = await API.post(`/pods/${podId}/message`, { content });
+      if (data?.data) {
+        setMessages((prev) => {
+          if (prev.some((m) => m._id && data.data._id && m._id === data.data._id)) return prev;
+          return [...prev, data.data];
+        });
+      }
     } catch (e) {
       console.error(e);
-      alert("Failed to send message.");
+      alert(e.response?.data?.message || "Failed to send message.");
     }
   };
+
 
   const handleAccept = async (userObj) => {
     try { await API.post(`/pods/${podId}/accept`, { requestUserId: toStr(userObj) }); fetchStatus(); }

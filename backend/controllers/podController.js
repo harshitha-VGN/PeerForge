@@ -408,8 +408,10 @@ export const getPod = async (req, res) => {
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
     const userId = req.user.userId;
-    const isMember = pod.members.some(m => m._id.toString() === userId);
+    const isMember = pod.members.some(m => (m._id || m).toString() === userId.toString()) ||
+                     (pod.creator && (pod.creator._id || pod.creator).toString() === userId.toString());
 
+    // Non-members cannot view pod chat messages
     if (!isMember) {
       const safeData = pod.toObject();
       safeData.messages = [];
@@ -435,6 +437,16 @@ export const sendMessage = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const pod = await Pod.findById(podId);
+    if (!pod) return res.status(404).json({ message: "Pod not found" });
+
+    const isMember = pod.members.some(m => (m._id || m).toString() === userId.toString()) ||
+                     (pod.creator && (pod.creator._id || pod.creator).toString() === userId.toString());
+
+    if (!isMember) {
+      return res.status(403).json({ message: "Not an active member of this pod" });
+    }
+
     const messageObj = {
       sender: userId,
       senderEmail: user.email,
@@ -442,19 +454,15 @@ export const sendMessage = async (req, res) => {
       createdAt: new Date(),
     };
 
-    // Atomic append to messages array
-    const updatedPod = await Pod.findOneAndUpdate(
-      { _id: podId, members: userId },
+    // Append message to pod
+    const updatedPod = await Pod.findByIdAndUpdate(
+      podId,
       {
         $push: { messages: messageObj },
         $set: { lastActivityAt: new Date() },
       },
       { new: true }
     ).populate("messages.sender", "email");
-
-    if (!updatedPod) {
-      return res.status(403).json({ message: "Not an active member of this pod" });
-    }
 
     const savedMessage = updatedPod.messages[updatedPod.messages.length - 1];
 
@@ -469,7 +477,7 @@ export const sendMessage = async (req, res) => {
       data: savedMessage,
     });
   } catch (err) {
-    console.error("sendMessage:", err);
+    console.error("sendMessage error:", err);
     res.status(500).json({ message: "Message failed" });
   }
 };
@@ -485,7 +493,10 @@ export const getMessages = async (req, res) => {
 
     if (!pod) return res.status(404).json({ message: "Pod not found" });
 
-    if (!pod.members.some(m => m._id.toString() === userId))
+    const isMember = pod.members.some(m => (m._id || m).toString() === userId.toString()) ||
+                     (pod.creator && (pod.creator._id || pod.creator).toString() === userId.toString());
+
+    if (!isMember)
       return res.status(403).json({ message: "Not a member" });
 
     res.json(pod.messages.slice(-100));
