@@ -14,11 +14,13 @@ module.exports = {
         accent4: "#f9c846", // Yellow
       },
       fontFamily: {
-        head: ['Syne', 'sans-serif'],
-        mono: ['DM Mono', 'monospace'],
-        body: ['Figtree', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        head: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
       },
     },
   },
+
   plugins: [],
 }
