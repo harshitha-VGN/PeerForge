@@ -2,6 +2,7 @@ import Duel from "../models/Duel.js";
 import User from "../models/User.js";
 import axios from "axios";
 import ReviewCard from "../models/ReviewCard.js";
+import VerificationJob from "../models/VerificationJob.js";
 import { getIO } from "../socket.js";
 
 const LC_URL = "https://leetcode.com/graphql";
@@ -297,6 +298,125 @@ export const getDuelStatus = async (req, res) => {
   }
 };
 
+export const fetchLeetCodeSubmissionsWithRetry = async (leetcodeUsername, retries = 3, initialDelay = 800) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(
+        LC_URL,
+        {
+          query: `query recentAcSubmissions($username: String!) { 
+            recentAcSubmissionList(username: $username, limit: 10) { 
+              titleSlug timestamp 
+            } 
+          }`,
+          variables: { username: leetcodeUsername }
+        },
+        { headers: LC_HEADERS, timeout: 6000 }
+      );
+
+      return response.data?.data?.recentAcSubmissionList || [];
+    } catch (error) {
+      lastError = error;
+      const isNetworkOr5xx = !error.response || error.response.status >= 500 || error.response.status === 429;
+      if (!isNetworkOr5xx && attempt === 1) {
+        throw error;
+      }
+      if (attempt < retries) {
+        const delay = initialDelay * Math.pow(2, attempt - 1);
+        await new Promise(res => setTimeout(res, delay));
+      }
+    }
+  }
+  throw lastError;
+};
+
+export const recordSolveAndFinalize = async (duel, user, validSolve) => {
+  const duelStartUnix = Math.floor(new Date(duel.startTime).getTime() / 1000) - 300;
+  const timeTaken = Math.max(1, Math.round(
+    (parseInt(validSolve.timestamp) - (duelStartUnix + 300)) / 60
+  ));
+  const userId = user._id || user;
+
+  let updatedDuel = await Duel.findOneAndUpdate(
+    {
+      roomId: duel.roomId,
+      "results.user": { $ne: userId }
+    },
+    {
+      $push: {
+        results: { user: userId, email: user.email, timeTaken }
+      }
+    },
+    { new: true }
+  )
+    .populate("creator", "email")
+    .populate("participants", "email leetcodeUsername")
+    .populate("results.user", "email");
+
+  if (!updatedDuel) {
+    updatedDuel = await Duel.findOne({ roomId: duel.roomId })
+      .populate("creator", "email")
+      .populate("participants", "email leetcodeUsername")
+      .populate("results.user", "email");
+  }
+
+  const opponentId = updatedDuel.participants.find(p => p._id?.toString() !== userId.toString() && p.toString() !== userId.toString());
+  const opponentIdStr = (opponentId?._id || opponentId)?.toString();
+  const opponentAbandoned = updatedDuel.abandonedBy.some(a => (a._id || a)?.toString() === opponentIdStr);
+
+  if (updatedDuel.results.length === 2 || opponentAbandoned) {
+    if (opponentAbandoned && updatedDuel.results.length === 1) {
+      await awardWinner(userId, user.email, updatedDuel);
+    } else if (updatedDuel.results.length === 2) {
+      const [p1, p2] = updatedDuel.results;
+      const winnerId = p1.timeTaken <= p2.timeTaken ? p1.user : p2.user;
+      const winnerEmail = p1.timeTaken <= p2.timeTaken ? p1.email : p2.email;
+      await awardWinner(winnerId, winnerEmail, updatedDuel);
+    }
+    updatedDuel.status = "COMPLETED";
+    for (const p of updatedDuel.participants) {
+      const pid = (p._id || p)?.toString();
+      if (!updatedDuel.hiddenFor.map(h => (h._id || h)?.toString()).includes(pid)) {
+        updatedDuel.hiddenFor.push(pid);
+      }
+    }
+    await updatedDuel.save();
+  }
+
+  // Add to revision queue
+  try {
+    const existing = await ReviewCard.findOne({ user: userId, problemSlug: duel.problemSlug });
+    if (!existing) {
+      await ReviewCard.create({
+        user: userId,
+        problemSlug: duel.problemSlug,
+        problemTitle: duel.problemTitle,
+        difficulty: duel.difficulty,
+        category: duel.category,
+        nextReviewDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+    }
+  } catch (cardErr) { console.warn("Review card init failed"); }
+
+  await User.findByIdAndUpdate(userId, { lastDuelSolvedAt: new Date() });
+
+  try {
+    getIO().to(`duel-${duel.roomId}`).emit("solve_verified", {
+      userId,
+      timeTaken,
+      duel: updatedDuel,
+      winner: updatedDuel.winner,
+      status: updatedDuel.status
+    });
+    getIO().to("lobby").emit("duel_updated", updatedDuel);
+  } catch (e) {
+    console.warn("Socket broadcast error:", e.message);
+  }
+
+  return { updatedDuel, timeTaken };
+};
+
 export const verifyAndFinalize = async (req, res) => {
   try {
     const { leetcodeUsername, roomId } = req.body;
@@ -305,104 +425,78 @@ export const verifyAndFinalize = async (req, res) => {
     const duel = await Duel.findOne({ roomId });
     if (!duel) return res.status(404).json({ message: "Duel not found" });
 
-    const response = await axios.post(LC_URL, {
-      query: `query recentAcSubmissions($username: String!) { 
-        recentAcSubmissionList(username: $username, limit: 10) { 
-          titleSlug timestamp 
-        } 
-      }`,
-      variables: { username: leetcodeUsername }
-    }, { headers: LC_HEADERS });
+    // Check if user has already solved this duel
+    const alreadySolved = duel.results.some(
+      r => (r.user?._id || r.user)?.toString() === userId
+    );
+    if (alreadySolved) {
+      return res.json({
+        success: true,
+        message: "You have already verified your solution for this duel!"
+      });
+    }
 
-    const submissions = response.data?.data?.recentAcSubmissionList || [];
+    let submissions;
+    try {
+      submissions = await fetchLeetCodeSubmissionsWithRetry(leetcodeUsername, 3, 800);
+    } catch (lcError) {
+      console.warn(`[VerificationQueue] LeetCode API unreachable for ${leetcodeUsername} in room ${roomId}. Queuing background verification:`, lcError.message);
+
+      // Enqueue job for background retries
+      await VerificationJob.findOneAndUpdate(
+        { roomId, userId },
+        {
+          roomId,
+          userId,
+          leetcodeUsername,
+          status: "PENDING",
+          lastError: lcError.message,
+          nextRetryAt: new Date(Date.now() + 5000), // First background retry in 5s
+          $inc: { attempts: 1 }
+        },
+        { upsert: true, new: true }
+      );
+
+      // Notify clients in the duel room that verification is queued
+      try {
+        getIO().to(`duel-${roomId}`).emit("verification_queued", {
+          roomId,
+          userId,
+          message: "LeetCode servers are currently slow or unreachable. Verification queued in background."
+        });
+      } catch (sockErr) {
+        console.warn("Socket broadcast error:", sockErr.message);
+      }
+
+      return res.status(202).json({
+        success: true,
+        queued: true,
+        message: "LeetCode is currently unreachable or slow. Your verification has been queued and will auto-complete once LeetCode responds!"
+      });
+    }
+
     const duelStartUnix = Math.floor(new Date(duel.startTime).getTime() / 1000) - 300;
     const validSolve = submissions.find(s =>
       s.titleSlug === duel.problemSlug && parseInt(s.timestamp) >= duelStartUnix
     );
-    if (!validSolve) return res.status(400).json({ message: "Solve not found on LeetCode." });
 
-    const timeTaken = Math.max(1, Math.round(
-      (parseInt(validSolve.timestamp) - (duelStartUnix + 300)) / 60
-    ));
-
-    // Atomic push result if not already submitted
-    let updatedDuel = await Duel.findOneAndUpdate(
-      {
-        roomId,
-        "results.user": { $ne: userId }
-      },
-      {
-        $push: {
-          results: { user: userId, email: currentUser.email, timeTaken }
-        }
-      },
-      { new: true }
-    )
-      .populate("creator", "email")
-      .populate("participants", "email leetcodeUsername")
-      .populate("results.user", "email");
-
-    if (!updatedDuel) {
-      updatedDuel = await Duel.findOne({ roomId })
-        .populate("creator", "email")
-        .populate("participants", "email leetcodeUsername")
-        .populate("results.user", "email");
+    if (!validSolve) {
+      return res.status(400).json({ message: "Solve not found on LeetCode. Make sure your submission was 'Accepted' and matches the problem." });
     }
 
-    const opponentId = updatedDuel.participants.find(p => p._id?.toString() !== userId && p.toString() !== userId);
-    const opponentIdStr = (opponentId?._id || opponentId)?.toString();
-    const opponentAbandoned = updatedDuel.abandonedBy.some(a => (a._id || a)?.toString() === opponentIdStr);
+    const { timeTaken } = await recordSolveAndFinalize(duel, currentUser, validSolve);
 
-    if (updatedDuel.results.length === 2 || opponentAbandoned) {
-      if (opponentAbandoned && updatedDuel.results.length === 1) {
-        await awardWinner(userId, currentUser.email, updatedDuel);
-      } else if (updatedDuel.results.length === 2) {
-        const [p1, p2] = updatedDuel.results;
-        const winnerId = p1.timeTaken <= p2.timeTaken ? p1.user : p2.user;
-        const winnerEmail = p1.timeTaken <= p2.timeTaken ? p1.email : p2.email;
-        await awardWinner(winnerId, winnerEmail, updatedDuel);
-      }
-      updatedDuel.status = "COMPLETED";
-      for (const p of updatedDuel.participants) {
-        const pid = (p._id || p)?.toString();
-        if (!updatedDuel.hiddenFor.map(h => (h._id || h)?.toString()).includes(pid)) {
-          updatedDuel.hiddenFor.push(pid);
-        }
-      }
-      await updatedDuel.save();
-    }
+    // If there was any pending job in queue, mark it COMPLETED
+    await VerificationJob.findOneAndUpdate(
+      { roomId, userId },
+      { status: "COMPLETED", lastError: null }
+    );
 
-    // Add to revision queue
-    try {
-      const existing = await ReviewCard.findOne({ user: userId, problemSlug: duel.problemSlug });
-      if (!existing) {
-        await ReviewCard.create({
-          user: userId,
-          problemSlug: duel.problemSlug,
-          problemTitle: duel.problemTitle,
-          difficulty: duel.difficulty,
-          category: duel.category,
-          nextReviewDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        });
-      }
-    } catch (cardErr) { console.warn("Review card init failed"); }
-
-    await User.findByIdAndUpdate(userId, { lastDuelSolvedAt: new Date() });
-
-    try {
-      getIO().to(`duel-${roomId}`).emit("solve_verified", {
-        userId,
-        timeTaken,
-        duel: updatedDuel,
-        winner: updatedDuel.winner,
-        status: updatedDuel.status
-      });
-      getIO().to("lobby").emit("duel_updated", updatedDuel);
-    } catch (e) {
-      console.warn("Socket broadcast error:", e.message);
-    }
-
-    res.json({ success: true, timeTaken, message: "Verified! Score awarded and added to Revision Queue." });
+    res.json({
+      success: true,
+      timeTaken,
+      message: "Verified! Score awarded and added to Revision Queue."
+    });
   } catch (error) {
     console.error("verifyAndFinalize error:", error);
     res.status(500).json({ message: "Referee error" });

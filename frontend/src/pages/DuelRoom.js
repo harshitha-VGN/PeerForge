@@ -13,6 +13,7 @@ const DuelRoom = () => {
   const [user, setUser] = useState(null);
   const [duel, setDuel] = useState(null);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isQueued, setIsQueued] = useState(false);
   const [opponentLeft, setOpponentLeft] = useState(false);
 
   const userRef = useRef(null);
@@ -90,11 +91,20 @@ const DuelRoom = () => {
         };
 
         const handleSolveVerified = ({ duel: updatedDuel }) => {
+          setIsQueued(false);
           if (updatedDuel) {
             setDuel(updatedDuel);
             duelRef.current = updatedDuel;
           } else {
             fetchStatus();
+          }
+        };
+
+        const handleVerificationQueued = (data) => {
+          const myId = userRef.current?._id?.toString();
+          if (data?.userId?.toString() === myId) {
+            setIsQueued(true);
+            setIsFinishing(false);
           }
         };
 
@@ -115,6 +125,7 @@ const DuelRoom = () => {
         socket.on("opponent_accepted", handleOpponentAccepted);
         socket.on("opponent_rejected", handleOpponentRejected);
         socket.on("solve_verified", handleSolveVerified);
+        socket.on("verification_queued", handleVerificationQueued);
         socket.on("opponent_abandoned", handleOpponentAbandoned);
         socket.on("duel_cancelled", handleDuelCancelled);
 
@@ -131,6 +142,7 @@ const DuelRoom = () => {
       socket.off("opponent_accepted");
       socket.off("opponent_rejected");
       socket.off("solve_verified");
+      socket.off("verification_queued");
       socket.off("opponent_abandoned");
       socket.off("duel_cancelled");
     };
@@ -172,6 +184,9 @@ const DuelRoom = () => {
     setIsFinishing(true);
     try {
       const res = await API.post('/duels/verify', { leetcodeUsername: user.leetcodeUsername, roomId });
+      if (res.data?.queued) {
+        setIsQueued(true);
+      }
       alert(res.data.message);
     } catch (err) {
       alert(err.response?.data?.message || 'Verification failed.');
@@ -337,6 +352,20 @@ const DuelRoom = () => {
                     >
                       <Plus size={16} /> 
                       <span>Exit & Start New Duel</span>
+                    </button>
+                  </div>
+                ) : isQueued ? (
+                  <div className="space-y-3">
+                    <div className="py-3 px-4 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl font-medium text-xs flex items-center justify-center gap-2 animate-pulse">
+                      <Loader2 size={16} className="animate-spin text-amber-400 shrink-0" />
+                      <span>LeetCode is slow/down. Verification queued & auto-retrying in background...</span>
+                    </div>
+                    <button 
+                      onClick={handleVerify} 
+                      disabled={isFinishing}
+                      className="w-full py-2.5 bg-[#1e1e28] hover:bg-[#282836] text-zinc-300 rounded-xl font-semibold transition text-xs flex items-center justify-center gap-2 border border-[#353545]"
+                    >
+                      <span>Check Status Again</span>
                     </button>
                   </div>
                 ) : (
