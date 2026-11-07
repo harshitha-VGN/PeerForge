@@ -23,10 +23,6 @@ export const initSocket = (httpServer, allowedOrigins) => {
       console.log(`Socket ${socket.id} left duel room: duel-${roomId}`);
     });
 
-    socket.on("code_update", ({ roomId, code }) => {
-      socket.to(`duel-${roomId}`).emit("receive_code", code);
-    });
-
     // ── Pod Events ──────────────────────────────────────────────────────────
     socket.on("join_pod", (podId) => {
       socket.join(`pod-${podId}`);

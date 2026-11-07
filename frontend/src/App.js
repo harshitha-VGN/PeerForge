@@ -5,7 +5,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import Auth from './pages/Auth';
-import Workspace from './pages/Workspace';
 import Leaderboard from './pages/Leaderboard';
 import Pods from './pages/Pods';
 import Profile from './pages/Profile';
@@ -48,10 +47,6 @@ function App() {
           {/* Protected Routes (Require Login) */}
           <Route path="/dashboard" element={
             <ProtectedRoute><Dashboard /></ProtectedRoute>
-          } />
-          
-          <Route path="/workspace/:titleSlug" element={
-            <ProtectedRoute><Workspace /></ProtectedRoute>
           } />
           
           <Route path="/leaderboard" element={
