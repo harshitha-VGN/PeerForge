@@ -16,11 +16,11 @@ import projectRoutes from "./routes/project.js";
 import economyRoutes from "./routes/economy.js";
 import problemRoutes from "./routes/problem.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
-import { startVerificationWorker } from "./workers/verificationWorker.js";
+import { initQueue } from "./workers/queueManager.js";
 
 dotenv.config();
 connectDB();
-startVerificationWorker(15000);
+initQueue();
 
 const app = express();
 const httpServer = createServer(app);

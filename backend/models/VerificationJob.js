@@ -7,7 +7,7 @@ const verificationJobSchema = new mongoose.Schema(
     leetcodeUsername: { type: String, required: true },
     status: {
       type: String,
-      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "NOT_FOUND"],
+      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "NOT_FOUND", "QUEUED_REDIS"],
       default: "PENDING",
     },
     attempts: { type: Number, default: 0 },

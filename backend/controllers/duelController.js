@@ -4,6 +4,7 @@ import axios from "axios";
 import ReviewCard from "../models/ReviewCard.js";
 import VerificationJob from "../models/VerificationJob.js";
 import { getIO } from "../socket.js";
+import { enqueueVerificationJob } from "../workers/queueManager.js";
 
 const LC_URL = "https://leetcode.com/graphql";
 const LC_HEADERS = {
@@ -442,20 +443,8 @@ export const verifyAndFinalize = async (req, res) => {
     } catch (lcError) {
       console.warn(`[VerificationQueue] LeetCode API unreachable for ${leetcodeUsername} in room ${roomId}. Queuing background verification:`, lcError.message);
 
-      // Enqueue job for background retries
-      await VerificationJob.findOneAndUpdate(
-        { roomId, userId },
-        {
-          roomId,
-          userId,
-          leetcodeUsername,
-          status: "PENDING",
-          lastError: lcError.message,
-          nextRetryAt: new Date(Date.now() + 5000), // First background retry in 5s
-          $inc: { attempts: 1 }
-        },
-        { upsert: true, new: true }
-      );
+      // Enqueue job via active driver (BullMQ if Redis is up, MongoDB otherwise)
+      await enqueueVerificationJob({ roomId, userId, leetcodeUsername, lastError: lcError.message });
 
       // Notify clients in the duel room that verification is queued
       try {
